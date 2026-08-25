@@ -3,7 +3,7 @@ services:
     name: socal-surf-guide
     runtime: ruby
     plan: free
-    buildCommand: bundle install
+    buildCommand: gem install bundler -v 2.5.23 && bundle install
     startCommand: bundle exec ruby server.rb
     healthCheckPath: /
     envVars:
