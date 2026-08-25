@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SoCal Surf Guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="brand">
+          <span class="logo" aria-hidden="true">🌊</span>
+          <div>
+            <h1>SoCal Surf Guide</h1>
+            <p class="tagline">Wave height, tide & wind → the right board for your session</p>
+          </div>
+        </div>
+        <div class="controls">
+          <label class="date-label">
+            Date
+            <input type="date" id="date-input" />
+          </label>
+          <button type="button" id="refresh-btn" class="btn">Refresh</button>
+          <button type="button" id="notify-btn" class="btn btn-ghost">Enable alerts</button>
+        </div>
+      </header>
+
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <section id="best-banner" class="best-banner" hidden></section>
+
+      <section class="legend">
+        <div class="legend-item good"><span>1–4 ft</span> Longboard</div>
+        <div class="legend-item big"><span>5+ ft</span> Body board / body surf</div>
+        <div class="legend-item flat"><span>&lt; 1 ft</span> Swimming</div>
+      </section>
+
+      <main id="spot-grid" class="spot-grid"></main>
+
+      <aside id="detail-panel" class="detail-panel" hidden></aside>
+
+      <footer class="footer">
+        <p>
+          Forecast data via
+          <a href="https://www.spitcast.com" target="_blank" rel="noopener">Spitcast</a>.
+          Runs locally on your machine.
+        </p>
+      </footer>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>

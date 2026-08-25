@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: socal-surf-guide
+    runtime: ruby
+    plan: free
+    buildCommand: ""
+    startCommand: ruby server.rb
+    healthCheckPath: /
+    envVars:
+      - key: RUBY_VERSION
+        value: 3.2.2
