@@ -40,7 +40,7 @@ The Ruby server serves the app and proxies Spitcast API requests (required becau
 1. Push this folder to a **GitHub** repository (see below if `git` is unavailable).
 2. Sign up at [render.com](https://render.com) and connect your GitHub account.
 3. Click **New → Blueprint** and select the repo (Render reads `render.yaml` automatically).
-   - Or **New → Web Service**, pick the repo, set **Start command** to `ruby server.rb`.
+   - Or **New → Web Service**, pick the repo, set **Language** to **Ruby**, **Build command** to `bundle install`, **Start command** to `bundle exec ruby server.rb`.
 4. Deploy. Render gives you a public HTTPS URL like `https://socal-surf-guide.onrender.com`.
 
 **If git fails on your Mac** (Xcode license): create a repo at [github.com/new](https://github.com/new), then upload these files via the GitHub website (“Add file → Upload files”).
