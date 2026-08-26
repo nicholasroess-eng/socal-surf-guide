@@ -3,11 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SoCal Surf Guide</title>
+    <title>SESH — Right board. Right day.</title>
+    <meta name="description" content="SESH turns swell, wind, and tide into one plain answer: which board, and whether it's worth paddling out." />
+    <link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="css/style.css" />
@@ -15,31 +17,52 @@
   <body>
     <div class="app">
       <header class="header">
-        <div class="brand">
-          <span class="logo" aria-hidden="true">🌊</span>
+        <a class="brand" href="/" aria-label="SESH home">
+          <img class="mark" src="img/sesh-mark.svg" alt="" width="22" height="72" />
           <div>
-            <h1>SoCal Surf Guide</h1>
-            <p class="tagline">Wave height, tide & wind → the right board for your session</p>
+            <p class="wordmark">SESH</p>
+            <p class="tagline">Right board. Right day.</p>
           </div>
-        </div>
+        </a>
         <div class="controls">
+          <button type="button" id="quiver-btn" class="btn">Create my quiver</button>
           <label class="date-label">
             Date
             <input type="date" id="date-input" />
           </label>
-          <button type="button" id="refresh-btn" class="btn">Refresh</button>
+          <button type="button" id="refresh-btn" class="btn btn-ghost">Refresh</button>
           <button type="button" id="notify-btn" class="btn btn-ghost">Enable alerts</button>
         </div>
       </header>
 
       <p id="status" class="status" aria-live="polite"></p>
 
+      <section id="quiver-bar" class="quiver-bar" hidden></section>
+
+      <div id="quiver-modal" class="quiver-modal" hidden aria-hidden="true">
+        <div class="quiver-modal-backdrop" data-close-quiver></div>
+        <div class="quiver-modal-panel" role="dialog" aria-labelledby="quiver-modal-title" aria-modal="true">
+          <div class="quiver-modal-header">
+            <h2 id="quiver-modal-title">Build your quiver</h2>
+            <p>Select the boards you own. Forecasts will match waves to your quiver.</p>
+            <button type="button" class="icon-btn quiver-close" data-close-quiver aria-label="Close">✕</button>
+          </div>
+          <div id="quiver-picker" class="quiver-picker"></div>
+          <div class="quiver-modal-footer">
+            <button type="button" id="quiver-save-btn" class="btn" disabled>Save my quiver</button>
+          </div>
+        </div>
+      </div>
+
       <section id="best-banner" class="best-banner" hidden></section>
 
-      <section class="legend">
-        <div class="legend-item good"><span>1–4 ft</span> Longboard</div>
-        <div class="legend-item big"><span>5+ ft</span> Body board / body surf</div>
-        <div class="legend-item flat"><span>&lt; 1 ft</span> Swimming</div>
+      <section class="spectrum" aria-label="Conditions spectrum">
+        <div class="spectrum-bar"></div>
+        <div class="spectrum-labels">
+          <span>Flat</span>
+          <span>Go</span>
+          <span>Firing</span>
+        </div>
       </section>
 
       <main id="spot-grid" class="spot-grid"></main>
@@ -47,11 +70,7 @@
       <aside id="detail-panel" class="detail-panel" hidden></aside>
 
       <footer class="footer">
-        <p>
-          Forecast data via
-          <a href="https://www.spitcast.com" target="_blank" rel="noopener">Spitcast</a>.
-          Runs locally on your machine.
-        </p>
+        <p>South Coast, USA. Forecast data via <a href="https://www.spitcast.com" target="_blank" rel="noopener">Spitcast</a>.</p>
       </footer>
     </div>
 

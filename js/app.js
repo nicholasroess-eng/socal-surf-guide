@@ -9,11 +9,24 @@ import {
   formatHour,
   formatDate,
 } from './recommendations.js';
+import {
+  BOARDS,
+  loadQuiver,
+  saveQuiver,
+  getBoard,
+  boardSvg,
+  matchingBoards,
+} from './quiver.js';
 
 const els = {
   dateInput: document.getElementById('date-input'),
   refreshBtn: document.getElementById('refresh-btn'),
   notifyBtn: document.getElementById('notify-btn'),
+  quiverBtn: document.getElementById('quiver-btn'),
+  quiverBar: document.getElementById('quiver-bar'),
+  quiverModal: document.getElementById('quiver-modal'),
+  quiverPicker: document.getElementById('quiver-picker'),
+  quiverSaveBtn: document.getElementById('quiver-save-btn'),
   status: document.getElementById('status'),
   bestBanner: document.getElementById('best-banner'),
   spotGrid: document.getElementById('spot-grid'),
@@ -23,6 +36,8 @@ const els = {
 
 let selectedSpotId = null;
 let lastPerfectKeys = new Set();
+let quiver = loadQuiver();
+let pickerSelection = new Set(quiver);
 
 function setStatus(msg, type = 'info') {
   els.status.textContent = msg;
@@ -36,6 +51,10 @@ function todayString() {
 
 function parseDateInput() {
   return new Date(`${els.dateInput.value}T12:00:00`);
+}
+
+function getRecommendation(waveFt) {
+  return recommendActivity(waveFt, quiver);
 }
 
 function buildHourly(spotForecast, tideMap, windMap, tideRange) {
@@ -61,7 +80,7 @@ function buildHourly(spotForecast, tideMap, windMap, tideRange) {
       waveFt,
       shape: row.shape,
       shapeLabel: shapeLabel(row.shape),
-      recommendation: recommendActivity(waveFt),
+      recommendation: getRecommendation(waveFt),
       wind: windLabel(windDir, windSpeed),
       tide: tideInfo,
       session,
@@ -77,23 +96,56 @@ function summarizeSpot(spot, hours) {
   const sample = daylight.length ? daylight : hours;
   const avgWave = sample.reduce((s, h) => s + h.waveFt, 0) / sample.length;
   const bestHour = [...sample].sort((a, b) => b.session.score - a.session.score)[0];
-  const recommendation = recommendActivity(avgWave);
+  const recommendation = getRecommendation(avgWave);
 
   return { avgWave, bestHour, recommendation, hours: sample };
+}
+
+function formatFt(n) {
+  return `${n.toFixed(1)}FT`;
+}
+
+function conditionCopy(recommendation, perfect) {
+  if (recommendation.tone === 'flat') {
+    return { label: 'Flat — sit this one out', cls: 'flat', cardTone: 'flat' };
+  }
+  if (perfect) {
+    return { label: 'Firing right now', cls: 'firing', cardTone: 'firing' };
+  }
+  if (recommendation.tone === 'big') {
+    return { label: 'Heavy — paddle with care', cls: 'big', cardTone: 'big' };
+  }
+  return { label: 'Go — worth the paddle', cls: 'good', cardTone: 'good' };
 }
 
 function renderSpotCard(spot, summary) {
   const { recommendation, avgWave, bestHour } = summary;
   const perfect = bestHour?.session.isPerfect;
+  const status = conditionCopy(recommendation, perfect);
+  const wind = bestHour?.wind;
+  const tide = bestHour?.tide;
 
   return `
-    <article class="spot-card ${recommendation.tone}" data-spot-id="${spot.id}" tabindex="0">
-      ${perfect ? '<span class="badge perfect">Perfect window</span>' : ''}
+    <article class="spot-card ${status.cardTone}" data-spot-id="${spot.id}" tabindex="0">
       <h2>${spot.shortName}</h2>
-      <p class="wave-size">${avgWave.toFixed(1)} ft avg</p>
-      <p class="activity">${recommendation.emoji} ${recommendation.activity}</p>
-      <p class="board">${recommendation.board}</p>
-      ${bestHour ? `<p class="best-time">Best: ${bestHour.hour} (${bestHour.session.score}/100)</p>` : ''}
+      <p class="spot-region">${spot.region}</p>
+      <div class="spot-metrics">
+        <div>
+          <p class="metric-value">${formatFt(avgWave)}</p>
+          <p class="metric-label">Wave face</p>
+        </div>
+        <div>
+          <p class="metric-value">${wind ? `${wind.speedMph}MPH` : '—'}</p>
+          <p class="metric-label">${wind ? `Wind ${wind.compass}` : 'Wind'}</p>
+        </div>
+        <div>
+          <p class="metric-value">${tide ? tide.phase : '—'}</p>
+          <p class="metric-label">${tide ? `${tide.heightFt} ft tide` : 'Tide'}</p>
+        </div>
+      </div>
+      <p class="spot-status ${status.cls}">${status.label}</p>
+      <p class="spot-rec-label">Recommended</p>
+      <p class="spot-rec">${recommendation.board}</p>
       ${spot.note ? `<p class="spot-note">${spot.note}</p>` : ''}
     </article>
   `;
@@ -117,15 +169,12 @@ function renderBestBanner(entries) {
   els.bestBanner.innerHTML = `
     <div class="banner-inner">
       <div>
-        <p class="banner-label">${perfect.length ? '🔥 Perfect conditions today' : '⭐ Best session today'}</p>
-        <h2>${top.spot.name} · ${h.hour}</h2>
-        <p class="banner-detail">
-          ${h.waveFt.toFixed(1)} ft waves · ${h.wind.compass} wind ${h.wind.speedMph} mph (${h.wind.quality}) ·
-          ${h.tide.phase} tide · Score ${h.session.score}/100
-        </p>
-        <p class="banner-ideal">Ideal setup: ${top.spot.idealWind}, ${top.spot.idealTide}</p>
+        <p class="banner-label">${perfect.length ? 'Firing right now' : 'Best session today'}</p>
+        <h2>${top.spot.name}</h2>
+        <p class="banner-metrics">${formatFt(h.waveFt)} · ${h.wind.speedMph}MPH ${h.wind.compass} · ${h.tide.phase} TIDE · ${h.hour}</p>
+        <p class="banner-ideal">${top.spot.idealWind} · ${top.spot.idealTide}</p>
       </div>
-      <div class="banner-rec">${h.recommendation.emoji} ${h.recommendation.activity}</div>
+      <div class="banner-rec">Recommended<strong>${h.recommendation.board}</strong></div>
     </div>
     ${
       perfect.length > 1
@@ -149,20 +198,19 @@ function maybeNotify(perfectEntries, topEntry) {
   lastPerfectKeys.add(key);
 
   const h = topEntry.summary.bestHour;
-  new Notification('Perfect surf conditions!', {
+  new Notification('SESH is firing', {
     body: `${topEntry.spot.name} at ${h.hour}: ${h.waveFt.toFixed(1)} ft, ${h.wind.quality}, ${h.tide.phase} tide`,
-    icon: '🏄',
   });
 }
 
 function renderDetail(spot, summary) {
-  const { hours, recommendation } = summary;
+  const { hours, recommendation, avgWave } = summary;
   const rows = hours
     .map(
       (h) => `
       <tr class="${h.session.isPerfect ? 'perfect-row' : ''}">
         <td>${h.hour}</td>
-        <td>${h.waveFt.toFixed(1)} ft</td>
+        <td>${h.waveFt.toFixed(1)}FT</td>
         <td>${h.shapeLabel}</td>
         <td>${h.wind.compass} ${h.wind.speedMph} mph<br><small>${h.wind.quality}</small></td>
         <td>${h.tide.phase}<br><small>${h.tide.heightFt} ft</small></td>
@@ -174,12 +222,21 @@ function renderDetail(spot, summary) {
     .join('');
 
   const best = hours.reduce((a, b) => (b.session.score > a.session.score ? b : a), hours[0]);
+  const quiverNote =
+    quiver.length && avgWave >= 1
+      ? (() => {
+          const matches = matchingBoards(avgWave, quiver);
+          if (!matches.length) return '<li><strong>Your quiver:</strong> No boards match today\'s average wave size</li>';
+          return `<li><strong>Your quiver fits:</strong> ${matches.map((b) => b.name).join(', ')}</li>`;
+        })()
+      : '';
 
   els.detailPanel.hidden = false;
   els.detailPanel.innerHTML = `
     <div class="detail-header">
       <div>
         <h2>${spot.name}</h2>
+        <p class="spot-region">${spot.region}</p>
         <p class="detail-summary">${recommendation.summary}</p>
         ${spot.note ? `<p class="spot-note">${spot.note}</p>` : ''}
       </div>
@@ -187,18 +244,20 @@ function renderDetail(spot, summary) {
     </div>
 
     <section class="ideal-box">
-      <h3>What makes a great session here</h3>
+      <h3>${quiver.length ? 'Recommendation for your quiver' : 'What makes a great session here'}</h3>
       <ul>
         <li><strong>Waves:</strong> 1–4 ft for longboarding; over 5 ft → body surf</li>
         <li><strong>Wind:</strong> ${spot.idealWind} — glassy, clean faces</li>
         <li><strong>Tide:</strong> ${spot.idealTide}</li>
+        ${quiverNote}
       </ul>
       ${
         best
           ? `<p class="peak-callout ${
               best.session.isPerfect ? 'perfect' : ''
             }">Peak window: <strong>${best.hour}</strong> — ${best.waveFt.toFixed(1)} ft,
-            ${best.wind.compass} ${best.wind.speedMph} mph, ${best.tide.phase} tide (score ${best.session.score})</p>`
+            grab your <strong>${best.recommendation.board}</strong> · ${best.wind.compass} ${best.wind.speedMph} mph,
+            ${best.tide.phase} tide (score ${best.session.score})</p>`
           : ''
       }
     </section>
@@ -230,6 +289,96 @@ function closeDetail() {
   document.querySelectorAll('.spot-card').forEach((c) => c.classList.remove('selected'));
 }
 
+function renderQuiverBar() {
+  if (!quiver.length) {
+    els.quiverBar.hidden = true;
+    els.quiverBtn.textContent = 'Create my quiver';
+    return;
+  }
+
+  els.quiverBar.hidden = false;
+  els.quiverBtn.textContent = 'Edit my quiver';
+
+  const chips = quiver
+    .map((id) => {
+      const board = getBoard(id);
+      if (!board) return '';
+      return `
+        <div class="quiver-chip" title="${board.name}">
+          <div class="quiver-chip-icon">${boardSvg(id)}</div>
+          <span>${board.name}</span>
+        </div>
+      `;
+    })
+    .join('');
+
+  els.quiverBar.innerHTML = `
+    <div class="quiver-bar-inner">
+      <div>
+        <p class="quiver-bar-label">Your quiver</p>
+        <div class="quiver-chips">${chips}</div>
+      </div>
+      <p class="quiver-bar-hint">Forecasts filtered to your boards</p>
+    </div>
+  `;
+}
+
+function renderQuiverPicker() {
+  els.quiverPicker.innerHTML = BOARDS.map(
+    (board) => `
+    <button
+      type="button"
+      class="quiver-option ${pickerSelection.has(board.id) ? 'selected' : ''}"
+      data-board-id="${board.id}"
+      aria-pressed="${pickerSelection.has(board.id)}"
+    >
+      <div class="quiver-option-icon">${boardSvg(board.id)}</div>
+      <span class="quiver-option-name">${board.name}</span>
+      <span class="quiver-option-label">${board.label}</span>
+      <span class="quiver-option-range">${board.idealMin}–${board.idealMax}FT ideal</span>
+    </button>
+  `
+  ).join('');
+
+  els.quiverPicker.querySelectorAll('.quiver-option').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.boardId;
+      if (pickerSelection.has(id)) pickerSelection.delete(id);
+      else pickerSelection.add(id);
+      btn.classList.toggle('selected', pickerSelection.has(id));
+      btn.setAttribute('aria-pressed', String(pickerSelection.has(id)));
+      els.quiverSaveBtn.disabled = pickerSelection.size === 0;
+    });
+  });
+
+  els.quiverSaveBtn.disabled = pickerSelection.size === 0;
+}
+
+function openQuiverModal() {
+  pickerSelection = new Set(quiver);
+  document.getElementById('quiver-modal-title').textContent = quiver.length
+    ? 'Edit your quiver'
+    : 'Build your quiver';
+  renderQuiverPicker();
+  els.quiverModal.hidden = false;
+  els.quiverModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
+}
+
+function closeQuiverModal() {
+  els.quiverModal.hidden = true;
+  els.quiverModal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('modal-open');
+}
+
+function saveQuiverSelection() {
+  quiver = [...pickerSelection];
+  saveQuiver(quiver);
+  closeQuiverModal();
+  renderQuiverBar();
+  loadDay().catch(handleError);
+}
+
 async function loadDay() {
   setStatus('Loading forecasts…');
   els.spotGrid.innerHTML = '<p class="loading">Fetching surf data…</p>';
@@ -256,7 +405,7 @@ async function loadDay() {
 
   els.spotGrid.innerHTML = entries.map((e) => renderSpotCard(e.spot, e.summary)).join('');
   renderBestBanner(entries);
-  setStatus(`Updated ${formatDate(date)}`, 'ok');
+  setStatus(`Updated ${formatDate(date)}${quiver.length ? ' · filtered to your quiver' : ''}`, 'ok');
 
   els.spotGrid.querySelectorAll('.spot-card').forEach((card) => {
     const open = () => {
@@ -301,6 +450,18 @@ async function setupNotifications() {
   });
 }
 
+function setupQuiver() {
+  els.quiverBtn.addEventListener('click', openQuiverModal);
+  els.quiverSaveBtn.addEventListener('click', saveQuiverSelection);
+  els.quiverModal.querySelectorAll('[data-close-quiver]').forEach((el) => {
+    el.addEventListener('click', closeQuiverModal);
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && !els.quiverModal.hidden) closeQuiverModal();
+  });
+  renderQuiverBar();
+}
+
 function init() {
   els.dateInput.value = todayString();
   els.dateInput.max = new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10);
@@ -309,6 +470,7 @@ function init() {
   els.dateInput.addEventListener('change', () => loadDay().catch(handleError));
   els.detailClose?.addEventListener('click', closeDetail);
 
+  setupQuiver();
   setupNotifications();
   loadDay().catch(handleError);
 }

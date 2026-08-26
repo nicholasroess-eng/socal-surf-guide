@@ -1,5 +1,12 @@
+import { recommendFromQuiver } from './quiver.js';
+
 /** Activity recommendation from wave height (feet). */
-export function recommendActivity(waveFt) {
+export function recommendActivity(waveFt, quiverIds = null) {
+  if (quiverIds?.length) {
+    const quiverRec = recommendFromQuiver(waveFt, quiverIds);
+    if (quiverRec) return quiverRec;
+  }
+
   if (waveFt > 5) {
     return {
       activity: 'Body Board / Body Surf',
@@ -41,9 +48,9 @@ export function windLabel(degrees, speedMph) {
   const compass = dirs[idx];
   const offshore = degrees >= 45 && degrees <= 135;
   let quality = 'Cross-shore';
-  if (offshore && speedMph <= 10) quality = 'Offshore ✓';
-  else if (offshore && speedMph > 10) quality = 'Offshore (strong)';
-  else if ((degrees >= 225 && degrees <= 315) || speedMph > 15) quality = 'Onshore ✗';
+  if (offshore && speedMph <= 10) quality = 'Offshore';
+  else if (offshore && speedMph > 10) quality = 'Offshore, strong';
+  else if ((degrees >= 225 && degrees <= 315) || speedMph > 15) quality = 'Onshore';
 
   return { compass, quality, offshore, speedMph: Math.round(speedMph) };
 }
