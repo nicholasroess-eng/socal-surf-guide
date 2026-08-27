@@ -42,14 +42,23 @@ class SpitcastProxyServlet < WEBrick::HTTPServlet::AbstractServlet
   end
 end
 
+class NoCacheFileHandler < WEBrick::HTTPServlet::FileHandler
+  def do_GET(req, res)
+    super
+    if req.path == '/' || req.path.end_with?('/') || req.path.match?(/\.(html|css|js|svg)$/)
+      res['Cache-Control'] = 'no-store, max-age=0'
+    end
+  end
+end
+
 server = WEBrick::HTTPServer.new(
   Port: PORT,
-  DocumentRoot: ROOT,
   BindAddress: HOST,
   Logger: WEBrick::Log.new($stderr, WEBrick::BasicLog::WARN),
   AccessLog: []
 )
 
+server.mount('/', NoCacheFileHandler, ROOT)
 server.mount('/api/spitcast', SpitcastProxyServlet)
 trap('INT') { server.shutdown }
 puts "SoCal Surf Guide → http://#{HOST}:#{PORT}"
