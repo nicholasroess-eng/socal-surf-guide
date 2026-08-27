@@ -1,37 +1,8 @@
 import { recommendFromQuiver } from './quiver.js';
 
-/** Activity recommendation from wave height (feet). */
-export function recommendActivity(waveFt, quiverIds = null) {
-  if (quiverIds?.length) {
-    const quiverRec = recommendFromQuiver(waveFt, quiverIds);
-    if (quiverRec) return quiverRec;
-  }
-
-  if (waveFt > 5) {
-    return {
-      activity: 'Body Board / Body Surf',
-      board: 'Bodyboard or fins',
-      emoji: '🏄',
-      tone: 'big',
-      summary: 'Waves are overhead — stick to body surfing or body boarding.',
-    };
-  }
-  if (waveFt >= 1) {
-    return {
-      activity: 'Longboard Surfing',
-      board: 'Longboard (9\'+)',
-      emoji: '🏄‍♂️',
-      tone: 'good',
-      summary: 'Ideal longboard range — mellow, fun surf.',
-    };
-  }
-  return {
-    activity: 'Swimming',
-    board: 'No board needed',
-    emoji: '🏊',
-    tone: 'flat',
-    summary: 'Flat conditions — better for a swim or rest day.',
-  };
+/** Activity recommendation from wave height, quiver, and break. */
+export function recommendActivity(waveFt, quiverIds = null, allowedIds = null) {
+  return recommendFromQuiver(waveFt, quiverIds, allowedIds);
 }
 
 export function shapeLabel(shape) {
@@ -122,6 +93,12 @@ export function scoreSession({ waveFt, shape, windDir, windSpeed, tideNorm }) {
   }
 
   return { score: Math.max(0, Math.min(100, score)), factors, isPerfect: score >= 72 };
+}
+
+export function scoreBand(score) {
+  if (score >= 72) return 'firing';
+  if (score >= 40) return 'go';
+  return 'sit';
 }
 
 export function formatHour(timestamp) {

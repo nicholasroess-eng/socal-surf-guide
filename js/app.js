@@ -6,6 +6,7 @@ import {
   windLabel,
   tideLabel,
   scoreSession,
+  scoreBand,
   formatHour,
   formatDate,
 } from './recommendations.js';
@@ -53,11 +54,11 @@ function parseDateInput() {
   return new Date(`${els.dateInput.value}T12:00:00`);
 }
 
-function getRecommendation(waveFt) {
-  return recommendActivity(waveFt, quiver);
+function getRecommendation(waveFt, spot) {
+  return recommendActivity(waveFt, quiver, spot.allowedBoards);
 }
 
-function buildHourly(spotForecast, tideMap, windMap, tideRange) {
+function buildHourly(spot, spotForecast, tideMap, windMap, tideRange) {
   return spotForecast.map((row) => {
     const waveFt = row.size_ft ?? row.size * 3.28084;
     const tide = tideMap.get(row.timestamp);
@@ -80,7 +81,7 @@ function buildHourly(spotForecast, tideMap, windMap, tideRange) {
       waveFt,
       shape: row.shape,
       shapeLabel: shapeLabel(row.shape),
-      recommendation: getRecommendation(waveFt),
+      recommendation: getRecommendation(waveFt, spot),
       wind: windLabel(windDir, windSpeed),
       tide: tideInfo,
       session,
@@ -96,7 +97,7 @@ function summarizeSpot(spot, hours) {
   const sample = daylight.length ? daylight : hours;
   const avgWave = sample.reduce((s, h) => s + h.waveFt, 0) / sample.length;
   const bestHour = [...sample].sort((a, b) => b.session.score - a.session.score)[0];
-  const recommendation = getRecommendation(avgWave);
+  const recommendation = getRecommendation(bestHour?.waveFt ?? avgWave, spot);
 
   return { avgWave, bestHour, recommendation, hours: sample };
 }
@@ -146,6 +147,7 @@ function renderSpotCard(spot, summary) {
       <p class="spot-status ${status.cls}">${status.label}</p>
       <p class="spot-rec-label">Recommended</p>
       <p class="spot-rec">${recommendation.board}</p>
+      ${bestHour ? `<p class="spot-note">Peak window ${bestHour.hour}</p>` : ''}
       ${spot.note ? `<p class="spot-note">${spot.note}</p>` : ''}
     </article>
   `;
@@ -215,18 +217,22 @@ function renderDetail(spot, summary) {
         <td>${h.wind.compass} ${h.wind.speedMph} mph<br><small>${h.wind.quality}</small></td>
         <td>${h.tide.phase}<br><small>${h.tide.heightFt} ft</small></td>
         <td>${h.recommendation.board}</td>
-        <td><span class="score ${h.session.isPerfect ? 'perfect' : ''}">${h.session.score}</span></td>
+        <td><span class="score ${scoreBand(h.session.score)}">${h.session.score}</span></td>
       </tr>
     `
     )
     .join('');
 
   const best = hours.reduce((a, b) => (b.session.score > a.session.score ? b : a), hours[0]);
+  const allowedNames = (spot.allowedBoards || [])
+    .map((id) => getBoard(id)?.name)
+    .filter(Boolean)
+    .join(', ');
   const quiverNote =
     quiver.length && avgWave >= 1
       ? (() => {
-          const matches = matchingBoards(avgWave, quiver);
-          if (!matches.length) return '<li><strong>Your quiver:</strong> No boards match today\'s average wave size</li>';
+          const matches = matchingBoards(avgWave, quiver, spot.allowedBoards);
+          if (!matches.length) return '<li><strong>Your quiver:</strong> No boards match this break and wave size</li>';
           return `<li><strong>Your quiver fits:</strong> ${matches.map((b) => b.name).join(', ')}</li>`;
         })()
       : '';
@@ -246,7 +252,7 @@ function renderDetail(spot, summary) {
     <section class="ideal-box">
       <h3>${quiver.length ? 'Recommendation for your quiver' : 'What makes a great session here'}</h3>
       <ul>
-        <li><strong>Waves:</strong> 1–4 ft for longboarding; over 5 ft → body surf</li>
+        <li><strong>This break:</strong> ${allowedNames}${spot.shortName === 'West Street' ? ', swimming' : '; swimming when flat'}</li>
         <li><strong>Wind:</strong> ${spot.idealWind} — glassy, clean faces</li>
         <li><strong>Tide:</strong> ${spot.idealTide}</li>
         ${quiverNote}
@@ -261,6 +267,14 @@ function renderDetail(spot, summary) {
           : ''
       }
     </section>
+
+    <p class="score-key">
+      <span class="score-key-label">Score</span>
+      <span><i class="swatch sit"></i> 0–39 sit</span>
+      <span><i class="swatch go"></i> 40–71 go</span>
+      <span><i class="swatch firing"></i> 72–100 firing</span>
+    </p>
+    <p class="score-key-hint">Combines wave size, shape, wind, and tide. Higher means a better window to paddle out.</p>
 
     <div class="table-wrap">
       <table>
@@ -397,7 +411,7 @@ async function loadDay() {
   const entries = await Promise.all(
     SPOTS.map(async (spot) => {
       const forecast = await getSpotForecast(spot.id, date);
-      const hours = buildHourly(forecast, tideMap, windMap, tideRange);
+      const hours = buildHourly(spot, forecast, tideMap, windMap, tideRange);
       const summary = summarizeSpot(spot, hours);
       return { spot, summary };
     })

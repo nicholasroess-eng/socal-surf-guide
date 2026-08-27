@@ -82,9 +82,9 @@ export function saveQuiver(boardIds) {
 function gradientFill(uid) {
   return `
     <linearGradient id="${uid}" x1="24" y1="156" x2="24" y2="8" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#E5342A"/>
+      <stop offset="0" stop-color="#FFC736"/>
       <stop offset="0.5" stop-color="#FF8A1E"/>
-      <stop offset="1" stop-color="#FFC736"/>
+      <stop offset="1" stop-color="#E5342A"/>
     </linearGradient>
   `;
 }
@@ -142,14 +142,12 @@ function boardFitScore(board, waveFt) {
   return Math.max(0, 100 - dist * 40);
 }
 
-/** Pick the best board from the user's quiver for given wave height. */
-export function recommendFromQuiver(waveFt, quiverIds) {
-  if (!quiverIds.length) return null;
-
+/** Pick the best board for wave height, quiver, and what this break allows. */
+export function recommendFromQuiver(waveFt, quiverIds, allowedIds = null) {
   if (waveFt < 1) {
     return {
       activity: 'Swimming',
-      board: 'No board needed',
+      board: 'Swimming',
       boardId: null,
       emoji: '🏊',
       tone: 'flat',
@@ -158,7 +156,24 @@ export function recommendFromQuiver(waveFt, quiverIds) {
     };
   }
 
-  const candidates = quiverIds
+  const allowed = allowedIds?.length ? allowedIds : BOARDS.map((b) => b.id);
+  const pool = quiverIds?.length
+    ? quiverIds.filter((id) => allowed.includes(id))
+    : allowed;
+
+  if (quiverIds?.length && !pool.length) {
+    return {
+      activity: 'Wrong break for your quiver',
+      board: 'This spot does not match your boards',
+      boardId: null,
+      emoji: '',
+      tone: 'flat',
+      summary: 'None of the boards in your quiver belong at this break.',
+      fromQuiver: true,
+    };
+  }
+
+  const candidates = pool
     .map((id) => getBoard(id))
     .filter(Boolean)
     .map((board) => ({ board, score: boardFitScore(board, waveFt) }))
@@ -167,12 +182,12 @@ export function recommendFromQuiver(waveFt, quiverIds) {
 
   if (!candidates.length) {
     return {
-      activity: 'No match in your quiver',
-      board: 'Consider a different spot or rest day',
+      activity: 'No match',
+      board: 'Not a fit for these waves',
       boardId: null,
-      emoji: '⚠️',
+      emoji: '',
       tone: 'flat',
-      summary: `${waveFt.toFixed(1)} ft waves don't suit any board in your quiver today.`,
+      summary: `${waveFt.toFixed(1)} ft does not suit the craft this break allows.`,
       fromQuiver: true,
     };
   }
@@ -184,14 +199,19 @@ export function recommendFromQuiver(waveFt, quiverIds) {
     boardId: best.id,
     emoji: best.emoji,
     tone: best.tone,
-    summary: `${waveFt.toFixed(1)} ft — grab your ${best.name.toLowerCase()}.`,
-    fromQuiver: true,
+    summary: `${waveFt.toFixed(1)} ft — ${best.name} is the call here.`,
+    fromQuiver: Boolean(quiverIds?.length),
   };
 }
 
-/** All boards in quiver that work at this wave height. */
-export function matchingBoards(waveFt, quiverIds) {
-  return quiverIds
+/** Boards that fit this wave height, quiver, and break. */
+export function matchingBoards(waveFt, quiverIds, allowedIds = null) {
+  const allowed = allowedIds?.length ? allowedIds : BOARDS.map((b) => b.id);
+  const pool = quiverIds?.length
+    ? quiverIds.filter((id) => allowed.includes(id))
+    : allowed;
+
+  return pool
     .map((id) => getBoard(id))
     .filter(Boolean)
     .filter((b) => waveFt >= b.minWave && waveFt <= b.maxWave);

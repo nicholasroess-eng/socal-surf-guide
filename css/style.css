@@ -1,13 +1,13 @@
 :root {
-  --flat: #e5342a;
+  --flat: #ffc736;
   --orange: #ff8a1e;
-  --firing: #ffc736;
+  --firing: #e5342a;
   --ink: #1e1815;
   --sand: #fbf2e3;
   --sand-2: #f3e6d0;
   --muted: #6b6158;
   --border: rgba(30, 24, 21, 0.12);
-  --spectrum: linear-gradient(90deg, #e5342a 0%, #ff8a1e 50%, #ffc736 100%);
+  --spectrum: linear-gradient(90deg, #ffc736 0%, #ff8a1e 50%, #e5342a 100%);
   --font-display: 'Anton', sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
   --font-data: 'IBM Plex Mono', ui-monospace, monospace;
@@ -334,7 +334,7 @@ body.modal-open {
 }
 
 .status[data-type='error'] {
-  color: var(--flat);
+  color: var(--firing);
 }
 
 .best-banner {
@@ -422,6 +422,50 @@ body.modal-open {
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.score-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin: 0.85rem 0 0;
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.score-key-label {
+  color: var(--muted);
+  letter-spacing: 0.12em;
+}
+
+.score-key .swatch {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.35rem;
+  vertical-align: -1px;
+}
+
+.score-key .swatch.sit {
+  background: var(--flat);
+}
+
+.score-key .swatch.go {
+  background: var(--orange);
+}
+
+.score-key .swatch.firing {
+  background: var(--firing);
+}
+
+.score-key-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
   color: var(--muted);
 }
 
@@ -535,7 +579,7 @@ body.modal-open {
 
 .spot-status.big,
 .spot-status.firing {
-  color: var(--ink);
+  color: var(--firing);
 }
 
 .spot-rec-label {
@@ -664,7 +708,7 @@ td {
 }
 
 .perfect-row {
-  background: rgba(255, 199, 54, 0.16);
+  background: rgba(229, 52, 42, 0.06);
 }
 
 .score {
@@ -676,9 +720,20 @@ td {
   font-weight: 600;
 }
 
+.score.sit {
+  background: var(--flat);
+  color: var(--ink);
+}
+
+.score.go {
+  background: var(--orange);
+  color: var(--ink);
+}
+
+.score.firing,
 .score.perfect {
   background: var(--firing);
-  color: var(--ink);
+  color: var(--sand);
 }
 
 .loading,

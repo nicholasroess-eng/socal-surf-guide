@@ -9,6 +9,7 @@ export const SPOTS = [
     region: 'San Clemente, CA',
     idealWind: 'E – NE (offshore)',
     idealTide: 'Mid tide',
+    allowedBoards: ['longboard', 'fish', 'midlength'],
     note: null,
   },
   {
@@ -18,6 +19,7 @@ export const SPOTS = [
     region: 'San Onofre, CA',
     idealWind: 'E – NE (offshore)',
     idealTide: 'Mid to high',
+    allowedBoards: ['longboard', 'fish', 'midlength'],
     note: null,
   },
   {
@@ -27,6 +29,7 @@ export const SPOTS = [
     region: 'Dana Point, CA',
     idealWind: 'E – NE (offshore)',
     idealTide: 'Mid tide',
+    allowedBoards: ['longboard', 'midlength', 'fish'],
     note: null,
   },
   {
@@ -36,6 +39,7 @@ export const SPOTS = [
     region: 'Dana Point, CA',
     idealWind: 'E – NE (offshore)',
     idealTide: 'Mid tide',
+    allowedBoards: ['shortboard', 'bodyboard', 'fish', 'midlength'],
     note: 'Forecast via nearby Salt Creek (Dana Point)',
   },
   {
@@ -45,6 +49,7 @@ export const SPOTS = [
     region: 'Laguna Beach, CA',
     idealWind: 'E – NE (offshore)',
     idealTide: 'Medium tide',
+    allowedBoards: ['bodyboard'],
     note: 'Forecast via nearby Brooks Street (Laguna Beach)',
   },
 ];
