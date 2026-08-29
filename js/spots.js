@@ -79,9 +79,94 @@ export function regionFromAddress(address) {
   return address;
 }
 
+function hasCoords(spot) {
+  return Number.isFinite(spot.lng) && Number.isFinite(spot.lat);
+}
+
+function geoDist(a, b) {
+  const midLat = ((a.lat + b.lat) / 2) * (Math.PI / 180);
+  const dLng = (a.lng - b.lng) * Math.cos(midLat);
+  return Math.hypot(dLng, a.lat - b.lat);
+}
+
+function circMean(degs) {
+  let x = 0;
+  let y = 0;
+  for (const d of degs) {
+    x += Math.cos((d * Math.PI) / 180);
+    y += Math.sin((d * Math.PI) / 180);
+  }
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+export function compassFromDeg(deg) {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+export function idealWindLabel(offshoreFrom) {
+  const a = compassFromDeg(offshoreFrom - 35);
+  const b = compassFromDeg(offshoreFrom + 35);
+  return a === b ? `${a} (offshore)` : `${a} – ${b} (offshore)`;
+}
+
+function findNeighbor(sorted, i, step, minDist = 0.02) {
+  const here = sorted[i];
+  for (let j = i + step; j >= 0 && j < sorted.length; j += step) {
+    if (hasCoords(sorted[j]) && geoDist(here, sorted[j]) > minDist) return sorted[j];
+  }
+  return null;
+}
+
+function rawOffshoreFrom(sorted, i) {
+  const s = sorted[i];
+  const prev = findNeighbor(sorted, i, -1);
+  const next = findNeighbor(sorted, i, 1);
+  let tx;
+  let ty;
+  if (prev && next) {
+    tx = next.lng - prev.lng;
+    ty = next.lat - prev.lat;
+  } else if (next) {
+    tx = next.lng - s.lng;
+    ty = next.lat - s.lat;
+  } else if (prev) {
+    tx = s.lng - prev.lng;
+    ty = s.lat - prev.lat;
+  } else {
+    return 90;
+  }
+  const left = { e: -ty, n: tx };
+  const right = { e: ty, n: -tx };
+  const oceanScore = (v) => -v.e * 2 - v.n;
+  const ocean = oceanScore(left) >= oceanScore(right) ? left : right;
+  return ((Math.atan2(-ocean.e, -ocean.n) * 180) / Math.PI + 360) % 360;
+}
+
+/** Set each spot’s offshore wind from the California coastline, not a SoCal default. */
+export function applyCoastOrientation(spots) {
+  const sorted = spots
+    .filter(hasCoords)
+    .slice()
+    .sort((a, b) => String(a.coastOrder).localeCompare(String(b.coastOrder)) || a.name.localeCompare(b.name));
+  const raw = sorted.map((_, i) => rawOffshoreFrom(sorted, i));
+  const smoothed = raw.map((_, i) => circMean(raw.slice(Math.max(0, i - 2), i + 3)));
+  const byId = new Map(sorted.map((s, i) => [s.id, smoothed[i]]));
+
+  return spots.map((spot) => {
+    const offshoreFrom = byId.has(spot.id) ? byId.get(spot.id) : 90;
+    return {
+      ...spot,
+      offshoreFrom,
+      idealWind: spot.idealWindLocked ? spot.idealWind : idealWindLabel(offshoreFrom),
+    };
+  });
+}
+
 export function toAppSpot(raw) {
   const id = Number(raw._id ?? raw.id);
   const override = SPOT_OVERRIDES[id] || {};
+  const coords = raw.coordinates || [];
   return {
     id,
     name: override.name || raw.spot_name,
@@ -90,6 +175,10 @@ export function toAppSpot(raw) {
     countyId: Number(raw.county_id),
     countyName: countyName(raw.county_id),
     coastOrder: raw.coast_order || '',
+    lng: Number(coords[0]),
+    lat: Number(coords[1]),
+    offshoreFrom: 90,
+    idealWindLocked: Boolean(override.idealWind),
     idealWind: override.idealWind || 'E – NE (offshore)',
     idealTide: override.idealTide || 'Mid tide',
     allowedBoards: override.allowedBoards || null,

@@ -3,6 +3,7 @@ import {
   loadFavoriteIds,
   saveFavoriteIds,
   toAppSpot,
+  applyCoastOrientation,
   groupSpotsByCounty,
 } from './spots.js';
 import {
@@ -53,6 +54,8 @@ const els = {
   spotGrid: document.getElementById('spot-grid'),
   detailPanel: document.getElementById('detail-panel'),
   detailClose: document.getElementById('detail-close'),
+  welcomeModal: document.getElementById('welcome-modal'),
+  welcomeDismissBtn: document.getElementById('welcome-dismiss-btn'),
 };
 
 let selectedSpotId = null;
@@ -96,12 +99,19 @@ function buildHourly(spot, spotForecast, tideMap, windMap, tideRange) {
     const tideInfo = tideLabel(pr, tideRange.min, tideRange.max);
     const windDir = wind?.wdir ?? 0;
     const windSpeed = wind?.wspd ?? 0;
+    const recommendation = getRecommendation(waveFt, spot);
+    const board = recommendation.boardId ? getBoard(recommendation.boardId) : null;
     const session = scoreSession({
       waveFt,
       shape: row.shape,
       windDir,
       windSpeed,
       tideNorm: tideInfo.norm,
+      offshoreFrom: spot.offshoreFrom,
+      idealMin: board?.idealMin ?? 2,
+      idealMax: board?.idealMax ?? 4,
+      surfableMin: board?.minWave ?? 1,
+      surfableMax: board?.maxWave ?? 5,
     });
 
     return {
@@ -110,8 +120,8 @@ function buildHourly(spot, spotForecast, tideMap, windMap, tideRange) {
       waveFt,
       shape: row.shape,
       shapeLabel: shapeLabel(row.shape),
-      recommendation: getRecommendation(waveFt, spot),
-      wind: windLabel(windDir, windSpeed),
+      recommendation,
+      wind: windLabel(windDir, windSpeed, spot.offshoreFrom),
       tide: tideInfo,
       session,
     };
@@ -443,7 +453,7 @@ function openQuiverModal() {
 function closeQuiverModal() {
   els.quiverModal.hidden = true;
   els.quiverModal.setAttribute('aria-hidden', 'true');
-  if (els.beachesModal.hidden) document.body.classList.remove('modal-open');
+  if (els.beachesModal.hidden && els.welcomeModal.hidden) document.body.classList.remove('modal-open');
 }
 
 function saveQuiverSelection() {
@@ -532,7 +542,7 @@ function openBeachesModal() {
 function closeBeachesModal() {
   els.beachesModal.hidden = true;
   els.beachesModal.setAttribute('aria-hidden', 'true');
-  if (els.quiverModal.hidden) document.body.classList.remove('modal-open');
+  if (els.quiverModal.hidden && els.welcomeModal.hidden) document.body.classList.remove('modal-open');
 }
 
 function saveBeachSelection() {
@@ -569,7 +579,7 @@ async function countyConditions(countyIds, date) {
 
 async function loadCatalog() {
   const raw = await getAllSpots();
-  catalog = raw.map(toAppSpot);
+  catalog = applyCoastOrientation(raw.map(toAppSpot));
   catalogById = new Map(catalog.map((s) => [s.id, s]));
   favoriteIds = loadFavoriteIds().filter((id) => catalogById.has(id));
   if (!favoriteIds.length) favoriteIds = DEFAULT_FAVORITE_IDS.filter((id) => catalogById.has(id));
@@ -671,6 +681,33 @@ function setupQuiver() {
   renderQuiverBar();
 }
 
+const WELCOME_KEY = 'sesh-welcome-seen';
+
+function openWelcomeModal() {
+  els.welcomeModal.hidden = false;
+  els.welcomeModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
+}
+
+function dismissWelcome() {
+  localStorage.setItem(WELCOME_KEY, '1');
+  els.welcomeModal.hidden = true;
+  els.welcomeModal.setAttribute('aria-hidden', 'true');
+  if (els.beachesModal.hidden && els.quiverModal.hidden) document.body.classList.remove('modal-open');
+}
+
+function setupWelcome() {
+  els.welcomeDismissBtn.addEventListener('click', dismissWelcome);
+  els.welcomeModal.querySelectorAll('[data-close-welcome]').forEach((el) => {
+    el.addEventListener('click', dismissWelcome);
+  });
+  try {
+    if (!localStorage.getItem(WELCOME_KEY)) openWelcomeModal();
+  } catch {
+    openWelcomeModal();
+  }
+}
+
 function setupBeaches() {
   els.beachesBtn.addEventListener('click', () => {
     loadCatalog()
@@ -693,10 +730,12 @@ function init() {
   els.detailClose?.addEventListener('click', closeDetail);
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if (!els.beachesModal.hidden) closeBeachesModal();
+    if (!els.welcomeModal.hidden) dismissWelcome();
+    else if (!els.beachesModal.hidden) closeBeachesModal();
     else if (!els.quiverModal.hidden) closeQuiverModal();
   });
 
+  setupWelcome();
   setupQuiver();
   setupBeaches();
   setupNotifications();

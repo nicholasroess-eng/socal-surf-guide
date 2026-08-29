@@ -12,18 +12,25 @@ export function shapeLabel(shape) {
   return 'Poor';
 }
 
-/** SoCal south-facing breaks: offshore wind blows from land (E / NE). */
-export function windLabel(degrees, speedMph) {
+export function angleDiff(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+/** Wind quality relative to this break’s offshore direction (degrees FROM). */
+export function windLabel(degrees, speedMph, offshoreFrom = 90) {
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   const idx = Math.round(((degrees % 360) / 45)) % 8;
   const compass = dirs[idx];
-  const offshore = degrees >= 45 && degrees <= 135;
+  const diff = angleDiff(degrees, offshoreFrom);
+  const offshore = diff <= 60;
+  const onshore = diff >= 120;
   let quality = 'Cross-shore';
   if (offshore && speedMph <= 10) quality = 'Offshore';
   else if (offshore && speedMph > 10) quality = 'Offshore, strong';
-  else if ((degrees >= 225 && degrees <= 315) || speedMph > 15) quality = 'Onshore';
+  else if (onshore || speedMph > 15) quality = 'Onshore';
 
-  return { compass, quality, offshore, speedMph: Math.round(speedMph) };
+  return { compass, quality, offshore, onshore, speedMph: Math.round(speedMph) };
 }
 
 /** What to wear from water temp in °F. */
@@ -49,17 +56,28 @@ export function tideLabel(prMeters, minPr, maxPr) {
 }
 
 /**
- * Score a session hour for longboard-friendly "perfect" conditions.
+ * Score a session hour for this break’s wind window and the board that fits.
  * Returns 0–100 and a human-readable breakdown.
  */
-export function scoreSession({ waveFt, shape, windDir, windSpeed, tideNorm }) {
+export function scoreSession({
+  waveFt,
+  shape,
+  windDir,
+  windSpeed,
+  tideNorm,
+  offshoreFrom = 90,
+  idealMin = 2,
+  idealMax = 4,
+  surfableMin = 1,
+  surfableMax = 5,
+}) {
   const factors = [];
   let score = 0;
 
-  if (waveFt >= 2 && waveFt <= 4) {
+  if (waveFt >= idealMin && waveFt <= idealMax) {
     score += 35;
     factors.push({ label: 'Wave height', detail: `${waveFt.toFixed(1)} ft — sweet spot`, good: true });
-  } else if (waveFt >= 1 && waveFt <= 5) {
+  } else if (waveFt >= surfableMin && waveFt <= surfableMax) {
     score += 18;
     factors.push({ label: 'Wave height', detail: `${waveFt.toFixed(1)} ft — surfable`, good: true });
   } else {
@@ -79,7 +97,7 @@ export function scoreSession({ waveFt, shape, windDir, windSpeed, tideNorm }) {
     factors.push({ label: 'Wave shape', detail: 'Poor', good: false });
   }
 
-  const wind = windLabel(windDir, windSpeed);
+  const wind = windLabel(windDir, windSpeed, offshoreFrom);
   if (wind.offshore && windSpeed <= 8) {
     score += 25;
     factors.push({ label: 'Wind', detail: `${wind.compass} ${wind.speedMph} mph — ${wind.quality}`, good: true });

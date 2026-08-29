@@ -319,6 +319,20 @@ body.modal-open {
   cursor: not-allowed;
 }
 
+.welcome-modal-panel {
+  width: min(520px, 100%);
+}
+
+.welcome-copy {
+  margin: 0 0 0.85rem;
+  font-size: 0.98rem;
+  color: var(--ink);
+}
+
+.welcome-copy:last-of-type {
+  margin-bottom: 1.25rem;
+}
+
 .beaches-modal-panel {
   width: min(760px, 100%);
 }

@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/style.css?v=6" />
+    <link rel="stylesheet" href="css/style.css?v=7" />
   </head>
   <body>
     <div class="app">
@@ -39,6 +39,25 @@
       <p id="status" class="status" aria-live="polite"></p>
 
       <section id="quiver-bar" class="quiver-bar" hidden></section>
+
+      <div id="welcome-modal" class="quiver-modal" hidden aria-hidden="true">
+        <div class="quiver-modal-backdrop" data-close-welcome></div>
+        <div class="quiver-modal-panel welcome-modal-panel" role="dialog" aria-labelledby="welcome-modal-title" aria-modal="true">
+          <div class="quiver-modal-header">
+            <h2 id="welcome-modal-title">What is SESH?</h2>
+            <button type="button" class="icon-btn quiver-close" data-close-welcome aria-label="Dismiss">✕</button>
+          </div>
+          <p class="welcome-copy">
+            SESH is a California surf guide. It reads swell, wind, tide, and water temperature, then gives you one answer: which board to take, what to wear, and whether it’s worth paddling out.
+          </p>
+          <p class="welcome-copy">
+            Pick the beaches you care about and the boards you own. Forecasts load only for your list — not the whole coast.
+          </p>
+          <div class="quiver-modal-footer">
+            <button type="button" id="welcome-dismiss-btn" class="btn">Got it</button>
+          </div>
+        </div>
+      </div>
 
       <div id="beaches-modal" class="quiver-modal" hidden aria-hidden="true">
         <div class="quiver-modal-backdrop" data-close-beaches></div>
@@ -102,6 +121,6 @@
       </footer>
     </div>
 
-    <script type="module" src="js/app.js?v=7"></script>
+    <script type="module" src="js/app.js?v=9"></script>
   </body>
 </html>
