@@ -11,7 +11,7 @@ HOST = ENV['HOST'] || '0.0.0.0'
 SPITCAST = 'https://api.spitcast.com'
 
 # Only forward known read-only forecast endpoints — blocks open-proxy abuse.
-ALLOWED = %r{\A/api/(spot_forecast/\d+/\d+/\d+/\d+|buoy_tide/\d+/\d+/\d+/\d+|buoy_ndfd/\d+/\d+/\d+/\d+|buoy_ww3/\d+/\d+/\d+/\d+)\z}
+ALLOWED = %r{\A/api/(spot|spot_forecast/\d+/\d+/\d+/\d+|buoy_tide/\d+/\d+/\d+/\d+|buoy_ndfd/\d+/\d+/\d+/\d+|buoy_ww3/\d+/\d+/\d+/\d+|buoy_ndbc/\d+/\d+/\d+/\d+)\z}
 
 class SpitcastProxyServlet < WEBrick::HTTPServlet::AbstractServlet
   def do_GET(req, res)
@@ -30,7 +30,9 @@ class SpitcastProxyServlet < WEBrick::HTTPServlet::AbstractServlet
     http.read_timeout = 15
     http.open_timeout = 10
 
-    upstream = http.get(uri.request_uri)
+    request = Net::HTTP::Get.new(uri.request_uri)
+    request['User-Agent'] = 'SESH-surf-guide/1.0'
+    upstream = http.request(request)
     res.status = upstream.code.to_i
     res['Content-Type'] = upstream['Content-Type'] || 'application/json'
     res['Cache-Control'] = 'public, max-age=300'

@@ -319,6 +319,117 @@ body.modal-open {
   cursor: not-allowed;
 }
 
+.beaches-modal-panel {
+  width: min(760px, 100%);
+}
+
+.beaches-search-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-family: var(--font-data);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+
+.beaches-search-label input {
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  padding: 0.55rem 0.7rem;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  text-transform: none;
+}
+
+.beaches-count {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.beaches-picker {
+  max-height: 48vh;
+  overflow-y: auto;
+  margin-bottom: 1.1rem;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.beaches-county {
+  padding: 0.75rem 0.85rem 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.beaches-county:last-child {
+  border-bottom: none;
+}
+
+.beaches-county h3 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.beaches-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.4rem;
+}
+
+.beach-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.55rem 0.65rem;
+  background: var(--sand);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.beach-option:hover {
+  border-color: var(--ink);
+}
+
+.beach-option.selected {
+  border-color: var(--orange);
+  box-shadow: inset 0 0 0 1px var(--orange);
+  background: #fff;
+}
+
+.beach-option-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.beach-option-region {
+  font-family: var(--font-data);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.beaches-empty {
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--muted);
+}
+
 .status {
   min-height: 1.15rem;
   font-family: var(--font-data);
@@ -535,8 +646,8 @@ body.modal-open {
 
 .spot-metrics {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0.5rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 0.75rem;
   margin: 1rem 0 0.95rem;
   padding-top: 0.9rem;
   border-top: 1px solid var(--border);
@@ -582,8 +693,15 @@ body.modal-open {
   color: var(--firing);
 }
 
+.spot-recs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
 .spot-rec-label {
-  margin: 0.85rem 0 0.15rem;
+  margin: 0 0 0.15rem;
   font-family: var(--font-data);
   font-size: 0.62rem;
   text-transform: uppercase;

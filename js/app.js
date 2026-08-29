@@ -1,10 +1,24 @@
-import { SPOTS } from './spots.js';
-import { getSpotForecast, getTideForecast, getWindForecast, indexByTimestamp } from './api.js';
+import {
+  DEFAULT_FAVORITE_IDS,
+  loadFavoriteIds,
+  saveFavoriteIds,
+  toAppSpot,
+  groupSpotsByCounty,
+} from './spots.js';
+import {
+  getAllSpots,
+  getSpotForecast,
+  getTideForecast,
+  getWindForecast,
+  getWaterTempF,
+  indexByTimestamp,
+} from './api.js';
 import {
   recommendActivity,
   shapeLabel,
   windLabel,
   tideLabel,
+  wearFromWaterTemp,
   scoreSession,
   scoreBand,
   formatHour,
@@ -28,6 +42,12 @@ const els = {
   quiverModal: document.getElementById('quiver-modal'),
   quiverPicker: document.getElementById('quiver-picker'),
   quiverSaveBtn: document.getElementById('quiver-save-btn'),
+  beachesBtn: document.getElementById('beaches-btn'),
+  beachesModal: document.getElementById('beaches-modal'),
+  beachesPicker: document.getElementById('beaches-picker'),
+  beachesSearch: document.getElementById('beaches-search'),
+  beachesCount: document.getElementById('beaches-count'),
+  beachesSaveBtn: document.getElementById('beaches-save-btn'),
   status: document.getElementById('status'),
   bestBanner: document.getElementById('best-banner'),
   spotGrid: document.getElementById('spot-grid'),
@@ -39,6 +59,10 @@ let selectedSpotId = null;
 let lastPerfectKeys = new Set();
 let quiver = loadQuiver();
 let pickerSelection = new Set(quiver);
+let catalog = [];
+let catalogById = new Map();
+let favoriteIds = loadFavoriteIds();
+let beachSelection = new Set(favoriteIds);
 
 function setStatus(msg, type = 'info') {
   els.status.textContent = msg;
@@ -52,6 +76,11 @@ function todayString() {
 
 function parseDateInput() {
   return new Date(`${els.dateInput.value}T12:00:00`);
+}
+
+function favoriteSpots() {
+  const spots = favoriteIds.map((id) => catalogById.get(id)).filter(Boolean);
+  return spots.length ? spots : DEFAULT_FAVORITE_IDS.map((id) => catalogById.get(id)).filter(Boolean);
 }
 
 function getRecommendation(waveFt, spot) {
@@ -89,17 +118,28 @@ function buildHourly(spot, spotForecast, tideMap, windMap, tideRange) {
   });
 }
 
-function summarizeSpot(spot, hours) {
+function summarizeSpot(spot, hours, waterTempF = null) {
+  const wear = wearFromWaterTemp(waterTempF);
   const daylight = hours.filter((h) => {
     const hr = new Date(h.timestamp * 1000).getHours();
     return hr >= 6 && hr <= 18;
   });
   const sample = daylight.length ? daylight : hours;
+  if (!sample.length) {
+    return {
+      avgWave: 0,
+      bestHour: null,
+      recommendation: getRecommendation(0, spot),
+      hours: [],
+      waterTempF,
+      wear,
+    };
+  }
   const avgWave = sample.reduce((s, h) => s + h.waveFt, 0) / sample.length;
   const bestHour = [...sample].sort((a, b) => b.session.score - a.session.score)[0];
   const recommendation = getRecommendation(bestHour?.waveFt ?? avgWave, spot);
 
-  return { avgWave, bestHour, recommendation, hours: sample };
+  return { avgWave, bestHour, recommendation, hours: sample, waterTempF, wear };
 }
 
 function formatFt(n) {
@@ -120,11 +160,12 @@ function conditionCopy(recommendation, perfect) {
 }
 
 function renderSpotCard(spot, summary) {
-  const { recommendation, avgWave, bestHour } = summary;
+  const { recommendation, avgWave, bestHour, waterTempF, wear } = summary;
   const perfect = bestHour?.session.isPerfect;
   const status = conditionCopy(recommendation, perfect);
   const wind = bestHour?.wind;
   const tide = bestHour?.tide;
+  const tempLabel = Number.isFinite(waterTempF) ? `${Math.round(waterTempF)}°F` : '—';
 
   return `
     <article class="spot-card ${status.cardTone}" data-spot-id="${spot.id}" tabindex="0">
@@ -143,10 +184,22 @@ function renderSpotCard(spot, summary) {
           <p class="metric-value">${tide ? tide.phase : '—'}</p>
           <p class="metric-label">${tide ? `${tide.heightFt} ft tide` : 'Tide'}</p>
         </div>
+        <div>
+          <p class="metric-value">${tempLabel}</p>
+          <p class="metric-label">Water</p>
+        </div>
       </div>
       <p class="spot-status ${status.cls}">${status.label}</p>
-      <p class="spot-rec-label">Recommended</p>
-      <p class="spot-rec">${recommendation.board}</p>
+      <div class="spot-recs">
+        <div>
+          <p class="spot-rec-label">Recommended</p>
+          <p class="spot-rec">${recommendation.board}</p>
+        </div>
+        <div>
+          <p class="spot-rec-label">Wear</p>
+          <p class="spot-rec">${wear ? wear.label : '—'}</p>
+        </div>
+      </div>
       ${bestHour ? `<p class="spot-note">Peak window ${bestHour.hour}</p>` : ''}
       ${spot.note ? `<p class="spot-note">${spot.note}</p>` : ''}
     </article>
@@ -228,6 +281,9 @@ function renderDetail(spot, summary) {
     .map((id) => getBoard(id)?.name)
     .filter(Boolean)
     .join(', ');
+  const breakLine = allowedNames
+    ? `${allowedNames}${spot.shortName === 'West Street' ? ', swimming' : '; swimming when flat'}`
+    : 'Any board by wave size; swimming when flat';
   const quiverNote =
     quiver.length && avgWave >= 1
       ? (() => {
@@ -252,9 +308,14 @@ function renderDetail(spot, summary) {
     <section class="ideal-box">
       <h3>${quiver.length ? 'Recommendation for your quiver' : 'What makes a great session here'}</h3>
       <ul>
-        <li><strong>This break:</strong> ${allowedNames}${spot.shortName === 'West Street' ? ', swimming' : '; swimming when flat'}</li>
+        <li><strong>This break:</strong> ${breakLine}</li>
         <li><strong>Wind:</strong> ${spot.idealWind} — glassy, clean faces</li>
         <li><strong>Tide:</strong> ${spot.idealTide}</li>
+        ${
+          Number.isFinite(summary.waterTempF)
+            ? `<li><strong>Water:</strong> ${Math.round(summary.waterTempF)}°F — wear a ${summary.wear.label}</li>`
+            : ''
+        }
         ${quiverNote}
       </ul>
       ${
@@ -382,7 +443,7 @@ function openQuiverModal() {
 function closeQuiverModal() {
   els.quiverModal.hidden = true;
   els.quiverModal.setAttribute('aria-hidden', 'true');
-  document.body.classList.remove('modal-open');
+  if (els.beachesModal.hidden) document.body.classList.remove('modal-open');
 }
 
 function saveQuiverSelection() {
@@ -393,33 +454,169 @@ function saveQuiverSelection() {
   loadDay().catch(handleError);
 }
 
+function updateBeachesCount() {
+  els.beachesCount.textContent = `${beachSelection.size} selected · ${catalog.length} in catalog`;
+  els.beachesSaveBtn.disabled = beachSelection.size === 0;
+}
+
+function renderBeachesPicker() {
+  const q = (els.beachesSearch.value || '').trim().toLowerCase();
+  const filtered = q
+    ? catalog.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.shortName.toLowerCase().includes(q) ||
+          s.region.toLowerCase().includes(q) ||
+          s.countyName.toLowerCase().includes(q)
+      )
+    : catalog;
+
+  const groups = groupSpotsByCounty(filtered);
+  if (!groups.length) {
+    els.beachesPicker.innerHTML = '<p class="beaches-empty">No beaches match that search.</p>';
+    updateBeachesCount();
+    return;
+  }
+
+  els.beachesPicker.innerHTML = groups
+    .map(
+      (group) => `
+      <section class="beaches-county">
+        <h3>${group.countyName}</h3>
+        <div class="beaches-list">
+          ${group.spots
+            .map(
+              (spot) => `
+            <button
+              type="button"
+              class="beach-option ${beachSelection.has(spot.id) ? 'selected' : ''}"
+              data-spot-id="${spot.id}"
+              aria-pressed="${beachSelection.has(spot.id)}"
+            >
+              <span class="beach-option-name">${spot.shortName}</span>
+              <span class="beach-option-region">${spot.region}</span>
+            </button>
+          `
+            )
+            .join('')}
+        </div>
+      </section>
+    `
+    )
+    .join('');
+
+  els.beachesPicker.querySelectorAll('.beach-option').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.spotId);
+      if (beachSelection.has(id)) beachSelection.delete(id);
+      else beachSelection.add(id);
+      btn.classList.toggle('selected', beachSelection.has(id));
+      btn.setAttribute('aria-pressed', String(beachSelection.has(id)));
+      updateBeachesCount();
+    });
+  });
+
+  updateBeachesCount();
+}
+
+function openBeachesModal() {
+  beachSelection = new Set(favoriteIds);
+  els.beachesSearch.value = '';
+  renderBeachesPicker();
+  els.beachesModal.hidden = false;
+  els.beachesModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
+  els.beachesSearch.focus();
+}
+
+function closeBeachesModal() {
+  els.beachesModal.hidden = true;
+  els.beachesModal.setAttribute('aria-hidden', 'true');
+  if (els.quiverModal.hidden) document.body.classList.remove('modal-open');
+}
+
+function saveBeachSelection() {
+  if (!beachSelection.size) return;
+  favoriteIds = [...beachSelection];
+  saveFavoriteIds(favoriteIds);
+  closeBeachesModal();
+  loadDay().catch(handleError);
+}
+
+async function countyConditions(countyIds, date) {
+  const unique = [...new Set(countyIds.filter(Boolean))];
+  const byCounty = {};
+  await Promise.all(
+    unique.map(async (countyId) => {
+      const [tideRows, windRows, waterTempF] = await Promise.all([
+        getTideForecast(countyId, date),
+        getWindForecast(countyId, date),
+        getWaterTempF(countyId, date).catch(() => null),
+      ]);
+      byCounty[countyId] = {
+        tideMap: indexByTimestamp(tideRows),
+        windMap: indexByTimestamp(windRows),
+        waterTempF,
+        tideRange: {
+          min: tideRows.length ? Math.min(...tideRows.map((r) => r.pr)) : 0,
+          max: tideRows.length ? Math.max(...tideRows.map((r) => r.pr)) : 1,
+        },
+      };
+    })
+  );
+  return byCounty;
+}
+
+async function loadCatalog() {
+  const raw = await getAllSpots();
+  catalog = raw.map(toAppSpot);
+  catalogById = new Map(catalog.map((s) => [s.id, s]));
+  favoriteIds = loadFavoriteIds().filter((id) => catalogById.has(id));
+  if (!favoriteIds.length) favoriteIds = DEFAULT_FAVORITE_IDS.filter((id) => catalogById.has(id));
+}
+
 async function loadDay() {
   setStatus('Loading forecasts…');
   els.spotGrid.innerHTML = '<p class="loading">Fetching surf data…</p>';
   els.bestBanner.hidden = true;
 
+  if (!catalog.length) await loadCatalog();
+
+  const spots = favoriteSpots();
+  if (!spots.length) {
+    els.spotGrid.innerHTML = '<p class="error-msg">No favorite beaches selected. Choose beaches to see forecasts.</p>';
+    setStatus('Choose at least one beach', 'error');
+    return;
+  }
+
   const date = parseDateInput();
-  const tideRows = await getTideForecast(date);
-  const windRows = await getWindForecast(date);
-  const tideMap = indexByTimestamp(tideRows);
-  const windMap = indexByTimestamp(windRows);
-  const tideRange = {
-    min: Math.min(...tideRows.map((r) => r.pr)),
-    max: Math.max(...tideRows.map((r) => r.pr)),
-  };
+  const conditions = await countyConditions(
+    spots.map((s) => s.countyId),
+    date
+  );
 
   const entries = await Promise.all(
-    SPOTS.map(async (spot) => {
+    spots.map(async (spot) => {
       const forecast = await getSpotForecast(spot.id, date);
-      const hours = buildHourly(spot, forecast, tideMap, windMap, tideRange);
-      const summary = summarizeSpot(spot, hours);
+      const cond = conditions[spot.countyId] || {
+        tideMap: new Map(),
+        windMap: new Map(),
+        tideRange: { min: 0, max: 1 },
+        waterTempF: null,
+      };
+      const hours = buildHourly(spot, forecast, cond.tideMap, cond.windMap, cond.tideRange);
+      const summary = summarizeSpot(spot, hours, cond.waterTempF);
       return { spot, summary };
     })
   );
 
   els.spotGrid.innerHTML = entries.map((e) => renderSpotCard(e.spot, e.summary)).join('');
   renderBestBanner(entries);
-  setStatus(`Updated ${formatDate(date)}${quiver.length ? ' · filtered to your quiver' : ''}`, 'ok');
+  const n = spots.length;
+  setStatus(
+    `Updated ${formatDate(date)} · ${n} beach${n === 1 ? '' : 'es'}${quiver.length ? ' · filtered to your quiver' : ''}`,
+    'ok'
+  );
 
   els.spotGrid.querySelectorAll('.spot-card').forEach((card) => {
     const open = () => {
@@ -442,6 +639,7 @@ async function loadDay() {
   if (selectedSpotId) {
     const entry = entries.find((e) => e.spot.id === selectedSpotId);
     if (entry) renderDetail(entry.spot, entry.summary);
+    else closeDetail();
   }
 }
 
@@ -470,10 +668,20 @@ function setupQuiver() {
   els.quiverModal.querySelectorAll('[data-close-quiver]').forEach((el) => {
     el.addEventListener('click', closeQuiverModal);
   });
-  document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && !els.quiverModal.hidden) closeQuiverModal();
-  });
   renderQuiverBar();
+}
+
+function setupBeaches() {
+  els.beachesBtn.addEventListener('click', () => {
+    loadCatalog()
+      .then(openBeachesModal)
+      .catch(handleError);
+  });
+  els.beachesSaveBtn.addEventListener('click', saveBeachSelection);
+  els.beachesSearch.addEventListener('input', renderBeachesPicker);
+  els.beachesModal.querySelectorAll('[data-close-beaches]').forEach((el) => {
+    el.addEventListener('click', closeBeachesModal);
+  });
 }
 
 function init() {
@@ -483,8 +691,14 @@ function init() {
   els.refreshBtn.addEventListener('click', () => loadDay().catch(handleError));
   els.dateInput.addEventListener('change', () => loadDay().catch(handleError));
   els.detailClose?.addEventListener('click', closeDetail);
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    if (!els.beachesModal.hidden) closeBeachesModal();
+    else if (!els.quiverModal.hidden) closeQuiverModal();
+  });
 
   setupQuiver();
+  setupBeaches();
   setupNotifications();
   loadDay().catch(handleError);
 }

@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/style.css?v=3" />
+    <link rel="stylesheet" href="css/style.css?v=6" />
   </head>
   <body>
     <div class="app">
@@ -25,6 +25,7 @@
           </div>
         </a>
         <div class="controls">
+          <button type="button" id="beaches-btn" class="btn btn-ghost">Choose my beaches</button>
           <button type="button" id="quiver-btn" class="btn">Create my quiver</button>
           <label class="date-label">
             Date
@@ -38,6 +39,26 @@
       <p id="status" class="status" aria-live="polite"></p>
 
       <section id="quiver-bar" class="quiver-bar" hidden></section>
+
+      <div id="beaches-modal" class="quiver-modal" hidden aria-hidden="true">
+        <div class="quiver-modal-backdrop" data-close-beaches></div>
+        <div class="quiver-modal-panel beaches-modal-panel" role="dialog" aria-labelledby="beaches-modal-title" aria-modal="true">
+          <div class="quiver-modal-header">
+            <h2 id="beaches-modal-title">Choose my beaches</h2>
+            <p>Pick from Spitcast’s California catalog. Forecasts load only for the beaches you save.</p>
+            <button type="button" class="icon-btn quiver-close" data-close-beaches aria-label="Close">✕</button>
+          </div>
+          <label class="beaches-search-label">
+            Search
+            <input type="search" id="beaches-search" placeholder="Name or county" autocomplete="off" />
+          </label>
+          <p id="beaches-count" class="beaches-count"></p>
+          <div id="beaches-picker" class="beaches-picker"></div>
+          <div class="quiver-modal-footer">
+            <button type="button" id="beaches-save-btn" class="btn" disabled>Save my beaches</button>
+          </div>
+        </div>
+      </div>
 
       <div id="quiver-modal" class="quiver-modal" hidden aria-hidden="true">
         <div class="quiver-modal-backdrop" data-close-quiver></div>
@@ -81,6 +102,6 @@
       </footer>
     </div>
 
-    <script type="module" src="js/app.js?v=3"></script>
+    <script type="module" src="js/app.js?v=7"></script>
   </body>
 </html>

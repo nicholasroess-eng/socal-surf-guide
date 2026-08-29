@@ -26,6 +26,18 @@ export function windLabel(degrees, speedMph) {
   return { compass, quality, offshore, speedMph: Math.round(speedMph) };
 }
 
+/** What to wear from water temp in °F. */
+export function wearFromWaterTemp(tempF) {
+  if (tempF == null || !Number.isFinite(tempF)) return null;
+  const t = Math.round(tempF);
+  if (t >= 80) return { label: 'Trunks', range: '80°F+' };
+  if (t >= 71) return { label: '1mm top', range: '71–79°F' };
+  if (t >= 65) return { label: '2mm spring suit', range: '65–70°F' };
+  if (t >= 55) return { label: '3/2 mm full suit', range: '55–64°F' };
+  if (t >= 48) return { label: '4/3 mm full suit', range: '48–54°F' };
+  return { label: '5/4 mm full suit', range: 'Below 48°F' };
+}
+
 export function tideLabel(prMeters, minPr, maxPr) {
   const range = maxPr - minPr || 1;
   const norm = (prMeters - minPr) / range;
