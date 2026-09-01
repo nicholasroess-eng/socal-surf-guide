@@ -542,12 +542,24 @@ body.modal-open {
 .spectrum-labels {
   display: flex;
   justify-content: space-between;
-  margin-top: 0.4rem;
-  font-family: var(--font-data);
-  font-size: 0.65rem;
+  margin-top: 0.55rem;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.spectrum-flat {
+  color: #c49212;
+}
+
+.spectrum-go {
+  color: var(--orange);
+}
+
+.spectrum-firing {
+  color: var(--firing);
 }
 
 .score-key {
@@ -772,6 +784,31 @@ body.modal-open {
 .detail-summary {
   margin: 0.4rem 0 0;
   color: var(--muted);
+}
+
+.why-call {
+  margin: 0 0 1.1rem;
+  padding: 0.95rem 1rem;
+  background: var(--sand);
+  border: 1px solid var(--border);
+}
+
+.why-call h3 {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.why-call p {
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+}
+
+.why-call p:last-child {
+  margin: 0;
 }
 
 .ideal-box {

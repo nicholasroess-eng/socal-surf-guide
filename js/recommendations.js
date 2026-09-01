@@ -139,3 +139,48 @@ export function formatHour(timestamp) {
 export function formatDate(date) {
   return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 }
+
+export function formatClock(date) {
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Contiguous daylight stretch for the peak hour’s board, from hourly forecast slots. */
+export function findPeakWindow(hours, peak) {
+  if (!peak || !hours?.length) return null;
+  const sorted = [...hours].sort((a, b) => a.timestamp - b.timestamp);
+  const idx = sorted.findIndex((h) => h.timestamp === peak.timestamp);
+  if (idx < 0) return { start: peak, end: peak };
+
+  const minScore =
+    peak.session.score < 40 ? peak.session.score : Math.max(40, Math.round(peak.session.score * 0.82));
+  const boardId = peak.recommendation.boardId;
+  const ok = (h) =>
+    h.recommendation.tone !== 'flat' &&
+    h.recommendation.boardId === boardId &&
+    h.session.score >= minScore;
+
+  let lo = idx;
+  while (
+    lo > 0 &&
+    ok(sorted[lo - 1]) &&
+    sorted[lo].timestamp - sorted[lo - 1].timestamp <= 3900
+  ) {
+    lo -= 1;
+  }
+  let hi = idx;
+  while (
+    hi < sorted.length - 1 &&
+    ok(sorted[hi + 1]) &&
+    sorted[hi + 1].timestamp - sorted[hi].timestamp <= 3900
+  ) {
+    hi += 1;
+  }
+  return { start: sorted[lo], end: sorted[hi] };
+}
+
+export function formatPeakWindow(window) {
+  if (!window) return '';
+  const start = formatHour(window.start.timestamp);
+  const end = formatHour(window.end.timestamp + 3600);
+  return start === end ? start : `${start} – ${end}`;
+}

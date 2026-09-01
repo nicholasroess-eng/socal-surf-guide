@@ -24,6 +24,9 @@ import {
   scoreBand,
   formatHour,
   formatDate,
+  formatClock,
+  findPeakWindow,
+  formatPeakWindow,
 } from './recommendations.js';
 import {
   BOARDS,
@@ -139,6 +142,8 @@ function summarizeSpot(spot, hours, waterTempF = null) {
     return {
       avgWave: 0,
       bestHour: null,
+      peakWindow: null,
+      peakWindowLabel: '',
       recommendation: getRecommendation(0, spot),
       hours: [],
       waterTempF,
@@ -148,12 +153,66 @@ function summarizeSpot(spot, hours, waterTempF = null) {
   const avgWave = sample.reduce((s, h) => s + h.waveFt, 0) / sample.length;
   const bestHour = [...sample].sort((a, b) => b.session.score - a.session.score)[0];
   const recommendation = getRecommendation(bestHour?.waveFt ?? avgWave, spot);
+  const peakWindow = findPeakWindow(sample, bestHour);
 
-  return { avgWave, bestHour, recommendation, hours: sample, waterTempF, wear };
+  return {
+    avgWave,
+    bestHour,
+    peakWindow,
+    peakWindowLabel: formatPeakWindow(peakWindow),
+    recommendation,
+    hours: sample,
+    waterTempF,
+    wear,
+  };
 }
 
 function formatFt(n) {
   return `${n.toFixed(1)}FT`;
+}
+
+function explainCall(spot, summary) {
+  const { bestHour: h, recommendation, wear, waterTempF, peakWindowLabel } = summary;
+  const window = peakWindowLabel ? ` Peak window ${peakWindowLabel}.` : '';
+
+  let grade;
+  if (!h || recommendation.tone === 'flat' || h.waveFt < 1) {
+    grade = 'Sit — it’s under a foot, so this is a swim or rest day, not a surf.';
+  } else {
+    const band = h.session.isPerfect ? 'Firing' : h.session.score >= 40 ? 'Go' : 'Sit';
+    const windBit = `${h.wind.quality.toLowerCase()} ${h.wind.compass} at ${h.wind.speedMph} mph`;
+    const shapeBit = `${h.shapeLabel.toLowerCase()} shape`;
+    if (band === 'Firing') {
+      grade = `Firing (score ${h.session.score}) — ${h.waveFt.toFixed(1)} ft, ${shapeBit}, ${windBit}, ${h.tide.phase.toLowerCase()} tide.${window}`;
+    } else if (band === 'Go') {
+      const drag = (h.session.factors || []).find((f) => !f.good);
+      const hold = drag ? ` Held back by ${drag.detail.split('—')[0].trim().toLowerCase()}.` : '';
+      grade = `Go (score ${h.session.score}) — surfable at ${h.waveFt.toFixed(1)} ft with ${windBit}.${hold}${window}`;
+    } else {
+      grade = `Sit (score ${h.session.score}) — ${h.waveFt.toFixed(1)} ft and ${windBit} don’t add up to a session.${window}`;
+    }
+  }
+
+  let board;
+  const craft = recommendation.boardId ? getBoard(recommendation.boardId) : null;
+  if (!h || recommendation.tone === 'flat' || recommendation.board === 'Swimming') {
+    board = 'No board — not enough wave to ride.';
+  } else if (!craft) {
+    board = `${recommendation.board}.`;
+  } else {
+    const quiverBit = recommendation.fromQuiver ? ' It’s in your quiver.' : '';
+    const breakBit = spot.allowedBoards ? ' This break suits that craft.' : '';
+    board = `${craft.name} — ${h.waveFt.toFixed(1)} ft sits in its ${craft.idealMin}–${craft.idealMax} ft range.${breakBit}${quiverBit}`;
+  }
+
+  let suit;
+  if (wear && Number.isFinite(waterTempF)) {
+    suit = `${wear.label} — water is ${Math.round(waterTempF)}°F (${wear.range}).`;
+  } else {
+    suit = 'No water-temp reading for this county yet.';
+  }
+
+  return { grade, board, suit };
 }
 
 function conditionCopy(recommendation, perfect) {
@@ -170,7 +229,7 @@ function conditionCopy(recommendation, perfect) {
 }
 
 function renderSpotCard(spot, summary) {
-  const { recommendation, avgWave, bestHour, waterTempF, wear } = summary;
+  const { recommendation, avgWave, bestHour, peakWindowLabel, waterTempF, wear } = summary;
   const perfect = bestHour?.session.isPerfect;
   const status = conditionCopy(recommendation, perfect);
   const wind = bestHour?.wind;
@@ -210,7 +269,7 @@ function renderSpotCard(spot, summary) {
           <p class="spot-rec">${wear ? wear.label : '—'}</p>
         </div>
       </div>
-      ${bestHour ? `<p class="spot-note">Peak window ${bestHour.hour}</p>` : ''}
+      ${peakWindowLabel ? `<p class="spot-note">Peak window ${peakWindowLabel}</p>` : ''}
       ${spot.note ? `<p class="spot-note">${spot.note}</p>` : ''}
     </article>
   `;
@@ -236,7 +295,7 @@ function renderBestBanner(entries) {
       <div>
         <p class="banner-label">${perfect.length ? 'Firing right now' : 'Best session today'}</p>
         <h2>${top.spot.name}</h2>
-        <p class="banner-metrics">${formatFt(h.waveFt)} · ${h.wind.speedMph}MPH ${h.wind.compass} · ${h.tide.phase} TIDE · ${h.hour}</p>
+        <p class="banner-metrics">${formatFt(h.waveFt)} · ${h.wind.speedMph}MPH ${h.wind.compass} · ${h.tide.phase} TIDE · ${top.summary.peakWindowLabel || h.hour}</p>
         <p class="banner-ideal">${top.spot.idealWind} · ${top.spot.idealTide}</p>
       </div>
       <div class="banner-rec">Recommended<strong>${h.recommendation.board}</strong></div>
@@ -245,7 +304,7 @@ function renderBestBanner(entries) {
       perfect.length > 1
         ? `<p class="banner-more">Also firing: ${perfect
             .slice(1, 4)
-            .map((e) => `${e.spot.shortName} (${e.summary.bestHour.hour})`)
+            .map((e) => `${e.spot.shortName} (${e.summary.peakWindowLabel || e.summary.bestHour.hour})`)
             .join(', ')}</p>`
         : ''
     }
@@ -264,7 +323,7 @@ function maybeNotify(perfectEntries, topEntry) {
 
   const h = topEntry.summary.bestHour;
   new Notification('SESH is firing', {
-    body: `${topEntry.spot.name} at ${h.hour}: ${h.waveFt.toFixed(1)} ft, ${h.wind.quality}, ${h.tide.phase} tide`,
+    body: `${topEntry.spot.name} ${topEntry.summary.peakWindowLabel || h.hour}: ${h.waveFt.toFixed(1)} ft, ${h.wind.quality}, ${h.tide.phase} tide`,
   });
 }
 
@@ -302,6 +361,7 @@ function renderDetail(spot, summary) {
           return `<li><strong>Your quiver fits:</strong> ${matches.map((b) => b.name).join(', ')}</li>`;
         })()
       : '';
+  const why = explainCall(spot, summary);
 
   els.detailPanel.hidden = false;
   els.detailPanel.innerHTML = `
@@ -314,6 +374,13 @@ function renderDetail(spot, summary) {
       </div>
       <button id="detail-close" class="icon-btn" aria-label="Close">✕</button>
     </div>
+
+    <section class="why-call">
+      <h3>Why this call</h3>
+      <p><strong>Grade.</strong> ${why.grade}</p>
+      <p><strong>Board.</strong> ${why.board}</p>
+      <p><strong>Wear.</strong> ${why.suit}</p>
+    </section>
 
     <section class="ideal-box">
       <h3>${quiver.length ? 'Recommendation for your quiver' : 'What makes a great session here'}</h3>
@@ -332,7 +399,7 @@ function renderDetail(spot, summary) {
         best
           ? `<p class="peak-callout ${
               best.session.isPerfect ? 'perfect' : ''
-            }">Peak window: <strong>${best.hour}</strong> — ${best.waveFt.toFixed(1)} ft,
+            }">Peak window: <strong>${summary.peakWindowLabel || best.hour}</strong> — ${best.waveFt.toFixed(1)} ft,
             grab your <strong>${best.recommendation.board}</strong> · ${best.wind.compass} ${best.wind.speedMph} mph,
             ${best.tide.phase} tide (score ${best.session.score})</p>`
           : ''
@@ -624,7 +691,7 @@ async function loadDay() {
   renderBestBanner(entries);
   const n = spots.length;
   setStatus(
-    `Updated ${formatDate(date)} · ${n} beach${n === 1 ? '' : 'es'}${quiver.length ? ' · filtered to your quiver' : ''}`,
+    `Updated ${formatClock(new Date())} · ${formatDate(date)} · ${n} beach${n === 1 ? '' : 'es'}${quiver.length ? ' · filtered to your quiver' : ''}`,
     'ok'
   );
 
