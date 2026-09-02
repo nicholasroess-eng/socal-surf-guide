@@ -131,9 +131,14 @@ export function scoreBand(score) {
   return 'sit';
 }
 
+const SURF_TZ = 'America/Los_Angeles';
+
 export function formatHour(timestamp) {
-  const d = new Date(timestamp * 1000);
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return new Date(timestamp * 1000).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: SURF_TZ,
+  });
 }
 
 export function formatDate(date) {

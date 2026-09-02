@@ -93,8 +93,35 @@ function getRecommendation(waveFt, spot) {
   return recommendActivity(waveFt, quiver, spot.allowedBoards);
 }
 
-function buildHourly(spot, spotForecast, tideMap, windMap, tideRange) {
-  return spotForecast.map((row) => {
+function surfLocal(row) {
+  const loc = row.date_local;
+  if (loc && Number.isFinite(Number(loc.yy)) && Number.isFinite(Number(loc.dd))) {
+    return {
+      year: Number(loc.yy),
+      month: Number(loc.mm),
+      day: Number(loc.dd),
+      hour: Number(loc.hh),
+    };
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(row.timestamp * 1000));
+  const n = (type) => Number(parts.find((p) => p.type === type)?.value);
+  return { year: n('year'), month: n('month'), day: n('day'), hour: n('hour') };
+}
+
+function buildHourly(spot, spotForecast, tideMap, windMap, tideRange, date) {
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  return spotForecast.flatMap((row) => {
+    const loc = surfLocal(row);
+    if (loc.year !== y || loc.month !== m || loc.day !== d) return [];
     const waveFt = row.size_ft ?? row.size * 3.28084;
     const tide = tideMap.get(row.timestamp);
     const wind = windMap.get(row.timestamp);
@@ -117,24 +144,28 @@ function buildHourly(spot, spotForecast, tideMap, windMap, tideRange) {
       surfableMax: board?.maxWave ?? 5,
     });
 
-    return {
-      timestamp: row.timestamp,
-      hour: formatHour(row.timestamp),
-      waveFt,
-      shape: row.shape,
-      shapeLabel: shapeLabel(row.shape),
-      recommendation,
-      wind: windLabel(windDir, windSpeed, spot.offshoreFrom),
-      tide: tideInfo,
-      session,
-    };
+    return [
+      {
+        timestamp: row.timestamp,
+        hour: formatHour(row.timestamp),
+        localHour: loc.hour,
+        waveFt,
+        shape: row.shape,
+        shapeLabel: shapeLabel(row.shape),
+        recommendation,
+        wind: windLabel(windDir, windSpeed, spot.offshoreFrom),
+        tide: tideInfo,
+        session,
+      },
+    ];
   });
 }
 
-function summarizeSpot(spot, hours, waterTempF = null) {
+function summarizeSpot(spot, hours, waterTempF = null, date = null) {
   const wear = wearFromWaterTemp(waterTempF);
+  const dayLabel = date ? formatDate(date) : '';
   const daylight = hours.filter((h) => {
-    const hr = new Date(h.timestamp * 1000).getHours();
+    const hr = Number.isFinite(h.localHour) ? h.localHour : new Date(h.timestamp * 1000).getHours();
     return hr >= 6 && hr <= 18;
   });
   const sample = daylight.length ? daylight : hours;
@@ -148,6 +179,7 @@ function summarizeSpot(spot, hours, waterTempF = null) {
       hours: [],
       waterTempF,
       wear,
+      dayLabel,
     };
   }
   const avgWave = sample.reduce((s, h) => s + h.waveFt, 0) / sample.length;
@@ -164,6 +196,7 @@ function summarizeSpot(spot, hours, waterTempF = null) {
     hours: sample,
     waterTempF,
     wear,
+    dayLabel,
   };
 }
 
@@ -328,7 +361,7 @@ function maybeNotify(perfectEntries, topEntry) {
 }
 
 function renderDetail(spot, summary) {
-  const { hours, recommendation, avgWave } = summary;
+  const { hours, recommendation, avgWave, dayLabel } = summary;
   const rows = hours
     .map(
       (h) => `
@@ -345,7 +378,9 @@ function renderDetail(spot, summary) {
     )
     .join('');
 
-  const best = hours.reduce((a, b) => (b.session.score > a.session.score ? b : a), hours[0]);
+  const best = hours.length
+    ? hours.reduce((a, b) => (b.session.score > a.session.score ? b : a), hours[0])
+    : null;
   const allowedNames = (spot.allowedBoards || [])
     .map((id) => getBoard(id)?.name)
     .filter(Boolean)
@@ -369,6 +404,7 @@ function renderDetail(spot, summary) {
       <div>
         <h2>${spot.name}</h2>
         <p class="spot-region">${spot.region}</p>
+        ${dayLabel ? `<p class="detail-day">${dayLabel}</p>` : ''}
         <p class="detail-summary">${recommendation.summary}</p>
         ${spot.note ? `<p class="spot-note">${spot.note}</p>` : ''}
       </div>
@@ -399,7 +435,7 @@ function renderDetail(spot, summary) {
         best
           ? `<p class="peak-callout ${
               best.session.isPerfect ? 'perfect' : ''
-            }">Peak window: <strong>${summary.peakWindowLabel || best.hour}</strong> — ${best.waveFt.toFixed(1)} ft,
+            }">Peak window${dayLabel ? ` ${dayLabel}` : ''}: <strong>${summary.peakWindowLabel || best.hour}</strong> — ${best.waveFt.toFixed(1)} ft,
             grab your <strong>${best.recommendation.board}</strong> · ${best.wind.compass} ${best.wind.speedMph} mph,
             ${best.tide.phase} tide (score ${best.session.score})</p>`
           : ''
@@ -414,7 +450,15 @@ function renderDetail(spot, summary) {
     </p>
     <p class="score-key-hint">Combines wave size, shape, wind, and tide. Higher means a better window to paddle out.</p>
 
-    <div class="table-wrap">
+    <section class="hourly">
+      <div class="hourly-heading">
+        <h3>Hourly waves</h3>
+        ${dayLabel ? `<p class="hourly-day">${dayLabel}</p>` : ''}
+        <p class="hourly-hint">Pacific time · daylight hours only</p>
+      </div>
+      ${
+        rows
+          ? `<div class="table-wrap">
       <table>
         <thead>
           <tr>
@@ -429,7 +473,10 @@ function renderDetail(spot, summary) {
         </thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>
+    </div>`
+          : `<p class="hourly-empty">No hourly forecast for ${dayLabel || 'this day'}.</p>`
+      }
+    </section>
   `;
 
   document.getElementById('detail-close').addEventListener('click', closeDetail);
@@ -681,8 +728,8 @@ async function loadDay() {
         tideRange: { min: 0, max: 1 },
         waterTempF: null,
       };
-      const hours = buildHourly(spot, forecast, cond.tideMap, cond.windMap, cond.tideRange);
-      const summary = summarizeSpot(spot, hours, cond.waterTempF);
+      const hours = buildHourly(spot, forecast, cond.tideMap, cond.windMap, cond.tideRange, date);
+      const summary = summarizeSpot(spot, hours, cond.waterTempF, date);
       return { spot, summary };
     })
   );

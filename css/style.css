@@ -781,6 +781,15 @@ body.modal-open {
   line-height: 0.95;
 }
 
+.detail-day {
+  margin: 0.4rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--orange);
+}
+
 .detail-summary {
   margin: 0.4rem 0 0;
   color: var(--muted);
@@ -842,6 +851,39 @@ body.modal-open {
 
 .peak-callout.perfect {
   border-left-color: var(--firing);
+}
+
+.hourly {
+  margin-top: 0.25rem;
+}
+
+.hourly-heading {
+  margin: 0 0 0.85rem;
+}
+
+.hourly-heading h3 {
+  margin: 0;
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hourly-day {
+  margin: 0.3rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.hourly-hint,
+.hourly-empty {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .table-wrap {
