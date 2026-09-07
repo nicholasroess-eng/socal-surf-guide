@@ -1,5 +1,5 @@
 import {
-  DEFAULT_FAVORITE_IDS,
+  MAX_FAVORITE_BEACHES,
   loadFavoriteIds,
   saveFavoriteIds,
   toAppSpot,
@@ -55,8 +55,8 @@ const els = {
   status: document.getElementById('status'),
   bestBanner: document.getElementById('best-banner'),
   spotGrid: document.getElementById('spot-grid'),
+  detailModal: document.getElementById('detail-modal'),
   detailPanel: document.getElementById('detail-panel'),
-  detailClose: document.getElementById('detail-close'),
   welcomeModal: document.getElementById('welcome-modal'),
   welcomeDismissBtn: document.getElementById('welcome-dismiss-btn'),
 };
@@ -85,8 +85,22 @@ function parseDateInput() {
 }
 
 function favoriteSpots() {
-  const spots = favoriteIds.map((id) => catalogById.get(id)).filter(Boolean);
-  return spots.length ? spots : DEFAULT_FAVORITE_IDS.map((id) => catalogById.get(id)).filter(Boolean);
+  return favoriteIds.map((id) => catalogById.get(id)).filter(Boolean);
+}
+
+function hasFavorites() {
+  return favoriteIds.length > 0;
+}
+
+function releaseModalLock() {
+  if (
+    els.welcomeModal.hidden &&
+    els.beachesModal.hidden &&
+    els.quiverModal.hidden &&
+    els.detailModal.hidden
+  ) {
+    document.body.classList.remove('modal-open');
+  }
 }
 
 function getRecommendation(waveFt, spot) {
@@ -398,11 +412,10 @@ function renderDetail(spot, summary) {
       : '';
   const why = explainCall(spot, summary);
 
-  els.detailPanel.hidden = false;
   els.detailPanel.innerHTML = `
     <div class="detail-header">
       <div>
-        <h2>${spot.name}</h2>
+        <h2 id="detail-spot-title">${spot.name}</h2>
         <p class="spot-region">${spot.region}</p>
         ${dayLabel ? `<p class="detail-day">${dayLabel}</p>` : ''}
         <p class="detail-summary">${recommendation.summary}</p>
@@ -479,13 +492,20 @@ function renderDetail(spot, summary) {
     </section>
   `;
 
+  els.detailModal.hidden = false;
+  els.detailModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
   document.getElementById('detail-close').addEventListener('click', closeDetail);
+  document.getElementById('detail-close').focus();
 }
 
 function closeDetail() {
-  els.detailPanel.hidden = true;
+  els.detailModal.hidden = true;
+  els.detailModal.setAttribute('aria-hidden', 'true');
+  els.detailPanel.innerHTML = '';
   selectedSpotId = null;
   document.querySelectorAll('.spot-card').forEach((c) => c.classList.remove('selected'));
+  releaseModalLock();
 }
 
 function renderQuiverBar() {
@@ -567,7 +587,7 @@ function openQuiverModal() {
 function closeQuiverModal() {
   els.quiverModal.hidden = true;
   els.quiverModal.setAttribute('aria-hidden', 'true');
-  if (els.beachesModal.hidden && els.welcomeModal.hidden) document.body.classList.remove('modal-open');
+  releaseModalLock();
 }
 
 function saveQuiverSelection() {
@@ -579,8 +599,22 @@ function saveQuiverSelection() {
 }
 
 function updateBeachesCount() {
-  els.beachesCount.textContent = `${beachSelection.size} selected · ${catalog.length} in catalog`;
-  els.beachesSaveBtn.disabled = beachSelection.size === 0;
+  const n = beachSelection.size;
+  els.beachesCount.textContent =
+    n >= MAX_FAVORITE_BEACHES
+      ? `${n} / ${MAX_FAVORITE_BEACHES} selected · limit reached`
+      : `${n} / ${MAX_FAVORITE_BEACHES} selected · ${catalog.length} in catalog`;
+  els.beachesCount.classList.toggle('at-limit', n >= MAX_FAVORITE_BEACHES);
+  els.beachesSaveBtn.disabled = n === 0;
+}
+
+function syncBeachLimit() {
+  const atLimit = beachSelection.size >= MAX_FAVORITE_BEACHES;
+  els.beachesPicker.querySelectorAll('.beach-option').forEach((btn) => {
+    const selected = beachSelection.has(Number(btn.dataset.spotId));
+    btn.disabled = atLimit && !selected;
+    btn.classList.toggle('at-limit', atLimit && !selected);
+  });
 }
 
 function renderBeachesPicker() {
@@ -633,20 +667,31 @@ function renderBeachesPicker() {
     btn.addEventListener('click', () => {
       const id = Number(btn.dataset.spotId);
       if (beachSelection.has(id)) beachSelection.delete(id);
-      else beachSelection.add(id);
+      else if (beachSelection.size < MAX_FAVORITE_BEACHES) beachSelection.add(id);
+      else return;
       btn.classList.toggle('selected', beachSelection.has(id));
       btn.setAttribute('aria-pressed', String(beachSelection.has(id)));
       updateBeachesCount();
+      syncBeachLimit();
     });
   });
 
   updateBeachesCount();
+  syncBeachLimit();
+}
+
+function syncBeachesDismiss() {
+  const canDismiss = hasFavorites();
+  els.beachesModal.querySelectorAll('.quiver-close[data-close-beaches]').forEach((el) => {
+    el.hidden = !canDismiss;
+  });
 }
 
 function openBeachesModal() {
   beachSelection = new Set(favoriteIds);
   els.beachesSearch.value = '';
   renderBeachesPicker();
+  syncBeachesDismiss();
   els.beachesModal.hidden = false;
   els.beachesModal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
@@ -654,17 +699,26 @@ function openBeachesModal() {
 }
 
 function closeBeachesModal() {
+  if (!hasFavorites()) return;
   els.beachesModal.hidden = true;
   els.beachesModal.setAttribute('aria-hidden', 'true');
-  if (els.quiverModal.hidden && els.welcomeModal.hidden) document.body.classList.remove('modal-open');
+  releaseModalLock();
 }
 
 function saveBeachSelection() {
   if (!beachSelection.size) return;
-  favoriteIds = [...beachSelection];
+  favoriteIds = [...beachSelection].slice(0, MAX_FAVORITE_BEACHES);
   saveFavoriteIds(favoriteIds);
+  syncBeachesDismiss();
   closeBeachesModal();
   loadDay().catch(handleError);
+}
+
+function promptBeachesIfNeeded() {
+  if (hasFavorites()) return;
+  loadCatalog()
+    .then(openBeachesModal)
+    .catch(handleError);
 }
 
 async function countyConditions(countyIds, date) {
@@ -696,7 +750,6 @@ async function loadCatalog() {
   catalog = applyCoastOrientation(raw.map(toAppSpot));
   catalogById = new Map(catalog.map((s) => [s.id, s]));
   favoriteIds = loadFavoriteIds().filter((id) => catalogById.has(id));
-  if (!favoriteIds.length) favoriteIds = DEFAULT_FAVORITE_IDS.filter((id) => catalogById.has(id));
 }
 
 async function loadDay() {
@@ -708,8 +761,15 @@ async function loadDay() {
 
   const spots = favoriteSpots();
   if (!spots.length) {
-    els.spotGrid.innerHTML = '<p class="error-msg">No favorite beaches selected. Choose beaches to see forecasts.</p>';
-    setStatus('Choose at least one beach', 'error');
+    els.spotGrid.innerHTML = `
+      <div class="beaches-empty-state">
+        <p>Pick up to ${MAX_FAVORITE_BEACHES} beaches you actually surf.</p>
+        <button type="button" class="btn" id="empty-beaches-btn">Choose my beaches</button>
+      </div>
+    `;
+    els.spotGrid.querySelector('#empty-beaches-btn')?.addEventListener('click', promptBeachesIfNeeded);
+    setStatus('Choose your beaches to load forecasts');
+    closeDetail();
     return;
   }
 
@@ -807,7 +867,8 @@ function dismissWelcome() {
   localStorage.setItem(WELCOME_KEY, '1');
   els.welcomeModal.hidden = true;
   els.welcomeModal.setAttribute('aria-hidden', 'true');
-  if (els.beachesModal.hidden && els.quiverModal.hidden) document.body.classList.remove('modal-open');
+  releaseModalLock();
+  promptBeachesIfNeeded();
 }
 
 function setupWelcome() {
@@ -817,6 +878,7 @@ function setupWelcome() {
   });
   try {
     if (!localStorage.getItem(WELCOME_KEY)) openWelcomeModal();
+    else promptBeachesIfNeeded();
   } catch {
     openWelcomeModal();
   }
@@ -841,12 +903,15 @@ function init() {
 
   els.refreshBtn.addEventListener('click', () => loadDay().catch(handleError));
   els.dateInput.addEventListener('change', () => loadDay().catch(handleError));
-  els.detailClose?.addEventListener('click', closeDetail);
+  els.detailModal.querySelectorAll('[data-close-detail]').forEach((el) => {
+    el.addEventListener('click', closeDetail);
+  });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
     if (!els.welcomeModal.hidden) dismissWelcome();
-    else if (!els.beachesModal.hidden) closeBeachesModal();
+    else if (!els.beachesModal.hidden && hasFavorites()) closeBeachesModal();
     else if (!els.quiverModal.hidden) closeQuiverModal();
+    else if (!els.detailModal.hidden) closeDetail();
   });
 
   setupWelcome();

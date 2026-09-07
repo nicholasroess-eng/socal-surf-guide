@@ -1,6 +1,6 @@
-/** Default SESH beaches plus catalog helpers. */
+/** SESH catalog helpers. */
 
-export const DEFAULT_FAVORITE_IDS = [239, 614, 213, 214, 215];
+export const MAX_FAVORITE_BEACHES = 10;
 
 const FAVORITES_KEY = 'sesh-favorite-spots';
 
@@ -189,17 +189,20 @@ export function toAppSpot(raw) {
 export function loadFavoriteIds() {
   try {
     const raw = localStorage.getItem(FAVORITES_KEY);
-    if (!raw) return [...DEFAULT_FAVORITE_IDS];
+    if (!raw) return [];
     const ids = JSON.parse(raw);
-    if (!Array.isArray(ids) || !ids.length) return [...DEFAULT_FAVORITE_IDS];
-    return ids.map(Number).filter((id) => Number.isFinite(id));
+    if (!Array.isArray(ids) || !ids.length) return [];
+    return ids
+      .map(Number)
+      .filter((id) => Number.isFinite(id))
+      .slice(0, MAX_FAVORITE_BEACHES);
   } catch {
-    return [...DEFAULT_FAVORITE_IDS];
+    return [];
   }
 }
 
 export function saveFavoriteIds(ids) {
-  localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids));
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids.slice(0, MAX_FAVORITE_BEACHES)));
 }
 
 export function groupSpotsByCounty(spots) {

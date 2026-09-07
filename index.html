@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/style.css?v=10" />
+    <link rel="stylesheet" href="css/style.css?v=12" />
   </head>
   <body>
     <div class="app">
@@ -51,10 +51,10 @@
             SESH is a California surf guide. It reads swell, wind, tide, and water temperature, then gives you one answer: which board to take, what to wear, and whether it’s worth paddling out.
           </p>
           <p class="welcome-copy">
-            Pick the beaches you care about and the boards you own. Forecasts load only for your list — not the whole coast.
+            Next, pick up to 10 beaches you actually surf, then add the boards you own. Forecasts load only for your list — not the whole coast.
           </p>
           <div class="quiver-modal-footer">
-            <button type="button" id="welcome-dismiss-btn" class="btn">Got it</button>
+            <button type="button" id="welcome-dismiss-btn" class="btn">Choose my beaches</button>
           </div>
         </div>
       </div>
@@ -64,7 +64,7 @@
         <div class="quiver-modal-panel beaches-modal-panel" role="dialog" aria-labelledby="beaches-modal-title" aria-modal="true">
           <div class="quiver-modal-header">
             <h2 id="beaches-modal-title">Choose my beaches</h2>
-            <p>Pick from Spitcast’s California catalog. Forecasts load only for the beaches you save.</p>
+            <p>Pick up to 10 spots from Spitcast’s California catalog. Forecasts load only for the beaches you save.</p>
             <button type="button" class="icon-btn quiver-close" data-close-beaches aria-label="Close">✕</button>
           </div>
           <label class="beaches-search-label">
@@ -114,13 +114,18 @@
 
       <main id="spot-grid" class="spot-grid"></main>
 
-      <aside id="detail-panel" class="detail-panel" hidden></aside>
+      <div id="detail-modal" class="quiver-modal" hidden aria-hidden="true">
+        <div class="quiver-modal-backdrop" data-close-detail></div>
+        <div class="quiver-modal-panel detail-modal-panel" role="dialog" aria-labelledby="detail-spot-title" aria-modal="true">
+          <div id="detail-panel" class="detail-panel"></div>
+        </div>
+      </div>
 
       <footer class="footer">
         <p>South Coast, USA. Forecast data via <a href="https://www.spitcast.com" target="_blank" rel="noopener">Spitcast</a>.</p>
       </footer>
     </div>
 
-    <script type="module" src="js/app.js?v=13"></script>
+    <script type="module" src="js/app.js?v=15"></script>
   </body>
 </html>
