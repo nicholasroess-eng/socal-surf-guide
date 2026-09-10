@@ -27,6 +27,7 @@ import {
   formatClock,
   findPeakWindow,
   formatPeakWindow,
+  pacificDateString,
 } from './recommendations.js';
 import {
   BOARDS,
@@ -76,8 +77,16 @@ function setStatus(msg, type = 'info') {
 }
 
 function todayString() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  return pacificDateString();
+}
+
+function isHappeningNow(summary) {
+  if (!summary?.bestHour) return false;
+  const now = Date.now() / 1000;
+  const window = summary.peakWindow;
+  if (window) return now >= window.start.timestamp && now < window.end.timestamp + 3600;
+  const ts = summary.bestHour.timestamp;
+  return now >= ts && now < ts + 3600;
 }
 
 function parseDateInput() {
@@ -139,10 +148,14 @@ function buildHourly(spot, spotForecast, tideMap, windMap, tideRange, date) {
     const waveFt = row.size_ft ?? row.size * 3.28084;
     const tide = tideMap.get(row.timestamp);
     const wind = windMap.get(row.timestamp);
-    const pr = tide?.pr ?? 0;
-    const tideInfo = tideLabel(pr, tideRange.min, tideRange.max);
-    const windDir = wind?.wdir ?? 0;
-    const windSpeed = wind?.wspd ?? 0;
+    const tideKnown = Number.isFinite(tide?.pr);
+    const windKnown = Number.isFinite(wind?.wdir) && Number.isFinite(wind?.wspd);
+    const pr = tideKnown ? tide.pr : 0;
+    const tideInfo = tideKnown
+      ? tideLabel(pr, tideRange.min, tideRange.max)
+      : { phase: '—', heightFt: '—', norm: 0.5 };
+    const windDir = windKnown ? wind.wdir : 0;
+    const windSpeed = windKnown ? wind.wspd : 0;
     const recommendation = getRecommendation(waveFt, spot);
     const board = recommendation.boardId ? getBoard(recommendation.boardId) : null;
     const session = scoreSession({
@@ -156,6 +169,8 @@ function buildHourly(spot, spotForecast, tideMap, windMap, tideRange, date) {
       idealMax: board?.idealMax ?? 4,
       surfableMin: board?.minWave ?? 1,
       surfableMax: board?.maxWave ?? 5,
+      windKnown,
+      tideKnown,
     });
 
     return [
@@ -167,8 +182,10 @@ function buildHourly(spot, spotForecast, tideMap, windMap, tideRange, date) {
         shape: row.shape,
         shapeLabel: shapeLabel(row.shape),
         recommendation,
-        wind: windLabel(windDir, windSpeed, spot.offshoreFrom),
-        tide: tideInfo,
+        wind: windKnown
+          ? { ...windLabel(windDir, windSpeed, spot.offshoreFrom), hasData: true }
+          : { compass: '—', quality: 'no reading', speedMph: 0, offshore: false, onshore: false, hasData: false },
+        tide: { ...tideInfo, hasData: tideKnown },
         session,
       },
     ];
@@ -262,12 +279,12 @@ function explainCall(spot, summary) {
   return { grade, board, suit };
 }
 
-function conditionCopy(recommendation, perfect) {
+function conditionCopy(recommendation, { perfect = false, live = false } = {}) {
   if (recommendation.tone === 'flat') {
     return { label: 'Flat — sit this one out', cls: 'flat', cardTone: 'flat' };
   }
   if (perfect) {
-    return { label: 'Firing right now', cls: 'firing', cardTone: 'firing' };
+    return { label: live ? 'Firing right now' : 'Firing', cls: 'firing', cardTone: 'firing' };
   }
   if (recommendation.tone === 'big') {
     return { label: 'Heavy — paddle with care', cls: 'big', cardTone: 'big' };
@@ -278,7 +295,7 @@ function conditionCopy(recommendation, perfect) {
 function renderSpotCard(spot, summary) {
   const { recommendation, avgWave, bestHour, peakWindowLabel, waterTempF, wear } = summary;
   const perfect = bestHour?.session.isPerfect;
-  const status = conditionCopy(recommendation, perfect);
+  const status = conditionCopy(recommendation, { perfect, live: Boolean(perfect && isHappeningNow(summary)) });
   const wind = bestHour?.wind;
   const tide = bestHour?.tide;
   const tempLabel = Number.isFinite(waterTempF) ? `${Math.round(waterTempF)}°F` : '—';
@@ -293,12 +310,12 @@ function renderSpotCard(spot, summary) {
           <p class="metric-label">Wave face</p>
         </div>
         <div>
-          <p class="metric-value">${wind ? `${wind.speedMph}MPH` : '—'}</p>
-          <p class="metric-label">${wind ? `Wind ${wind.compass}` : 'Wind'}</p>
+          <p class="metric-value">${wind?.hasData ? `${wind.speedMph}MPH` : '—'}</p>
+          <p class="metric-label">${wind?.hasData ? `Wind ${wind.compass}` : 'Wind'}</p>
         </div>
         <div>
-          <p class="metric-value">${tide ? tide.phase : '—'}</p>
-          <p class="metric-label">${tide ? `${tide.heightFt} ft tide` : 'Tide'}</p>
+          <p class="metric-value">${tide?.hasData ? tide.phase : '—'}</p>
+          <p class="metric-label">${tide?.hasData ? `${tide.heightFt} ft tide` : 'Tide'}</p>
         </div>
         <div>
           <p class="metric-value">${tempLabel}</p>
@@ -335,12 +352,15 @@ function renderBestBanner(entries) {
   const top = ranked[0];
   const h = top.summary.bestHour;
   const perfect = ranked.filter((e) => e.summary.bestHour.session.isPerfect);
+  const live = Boolean(perfect.length && isHappeningNow(top.summary));
+  const selectedToday = els.dateInput.value === todayString();
+  const bannerLabel = live ? 'Firing right now' : perfect.length ? 'Firing' : selectedToday ? 'Best session today' : 'Best session';
 
   els.bestBanner.hidden = false;
   els.bestBanner.innerHTML = `
     <div class="banner-inner">
       <div>
-        <p class="banner-label">${perfect.length ? 'Firing right now' : 'Best session today'}</p>
+        <p class="banner-label">${bannerLabel}</p>
         <h2>${top.spot.name}</h2>
         <p class="banner-metrics">${formatFt(h.waveFt)} · ${h.wind.speedMph}MPH ${h.wind.compass} · ${h.tide.phase} TIDE · ${top.summary.peakWindowLabel || h.hour}</p>
         <p class="banner-ideal">${top.spot.idealWind} · ${top.spot.idealTide}</p>
@@ -383,8 +403,8 @@ function renderDetail(spot, summary) {
         <td>${h.hour}</td>
         <td>${h.waveFt.toFixed(1)}FT</td>
         <td>${h.shapeLabel}</td>
-        <td>${h.wind.compass} ${h.wind.speedMph} mph<br><small>${h.wind.quality}</small></td>
-        <td>${h.tide.phase}<br><small>${h.tide.heightFt} ft</small></td>
+        <td>${h.wind.hasData ? `${h.wind.compass} ${h.wind.speedMph} mph<br><small>${h.wind.quality}</small>` : '—'}</td>
+        <td>${h.tide.hasData ? `${h.tide.phase}<br><small>${h.tide.heightFt} ft</small>` : '—'}</td>
         <td>${h.recommendation.board}</td>
         <td><span class="score ${scoreBand(h.session.score)}">${h.session.score}</span></td>
       </tr>
@@ -726,20 +746,32 @@ async function countyConditions(countyIds, date) {
   const byCounty = {};
   await Promise.all(
     unique.map(async (countyId) => {
-      const [tideRows, windRows, waterTempF] = await Promise.all([
-        getTideForecast(countyId, date),
-        getWindForecast(countyId, date),
-        getWaterTempF(countyId, date).catch(() => null),
-      ]);
-      byCounty[countyId] = {
-        tideMap: indexByTimestamp(tideRows),
-        windMap: indexByTimestamp(windRows),
-        waterTempF,
-        tideRange: {
-          min: tideRows.length ? Math.min(...tideRows.map((r) => r.pr)) : 0,
-          max: tideRows.length ? Math.max(...tideRows.map((r) => r.pr)) : 1,
-        },
-      };
+      try {
+        const [tideRows, windRows, waterTempF] = await Promise.all([
+          getTideForecast(countyId, date),
+          getWindForecast(countyId, date),
+          getWaterTempF(countyId, date).catch(() => null),
+        ]);
+        const tides = Array.isArray(tideRows) ? tideRows : [];
+        const winds = Array.isArray(windRows) ? windRows : [];
+        byCounty[countyId] = {
+          tideMap: indexByTimestamp(tides),
+          windMap: indexByTimestamp(winds),
+          waterTempF,
+          tideRange: {
+            min: tides.length ? Math.min(...tides.map((r) => r.pr)) : 0,
+            max: tides.length ? Math.max(...tides.map((r) => r.pr)) : 1,
+          },
+        };
+      } catch (err) {
+        console.warn(`County ${countyId} conditions failed`, err);
+        byCounty[countyId] = {
+          tideMap: new Map(),
+          windMap: new Map(),
+          waterTempF: null,
+          tideRange: { min: 0, max: 1 },
+        };
+      }
     })
   );
   return byCounty;
@@ -779,20 +811,34 @@ async function loadDay() {
     date
   );
 
-  const entries = await Promise.all(
+  const settled = await Promise.all(
     spots.map(async (spot) => {
-      const forecast = await getSpotForecast(spot.id, date);
-      const cond = conditions[spot.countyId] || {
-        tideMap: new Map(),
-        windMap: new Map(),
-        tideRange: { min: 0, max: 1 },
-        waterTempF: null,
-      };
-      const hours = buildHourly(spot, forecast, cond.tideMap, cond.windMap, cond.tideRange, date);
-      const summary = summarizeSpot(spot, hours, cond.waterTempF, date);
-      return { spot, summary };
+      try {
+        const forecast = await getSpotForecast(spot.id, date);
+        const cond = conditions[spot.countyId] || {
+          tideMap: new Map(),
+          windMap: new Map(),
+          tideRange: { min: 0, max: 1 },
+          waterTempF: null,
+        };
+        const hours = buildHourly(
+          spot,
+          Array.isArray(forecast) ? forecast : [],
+          cond.tideMap,
+          cond.windMap,
+          cond.tideRange,
+          date
+        );
+        const summary = summarizeSpot(spot, hours, cond.waterTempF, date);
+        return { spot, summary };
+      } catch (err) {
+        console.warn(`Forecast failed for ${spot.name}`, err);
+        return null;
+      }
     })
   );
+  const entries = settled.filter(Boolean);
+  if (!entries.length) throw new Error('Could not load forecasts for your beaches. Refresh and try again.');
 
   els.spotGrid.innerHTML = entries.map((e) => renderSpotCard(e.spot, e.summary)).join('');
   renderBestBanner(entries);
@@ -899,7 +945,7 @@ function setupBeaches() {
 
 function init() {
   els.dateInput.value = todayString();
-  els.dateInput.max = new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10);
+  els.dateInput.max = pacificDateString(new Date(Date.now() + 6 * 86400000));
 
   els.refreshBtn.addEventListener('click', () => loadDay().catch(handleError));
   els.dateInput.addEventListener('change', () => loadDay().catch(handleError));
@@ -924,7 +970,7 @@ function init() {
 function handleError(err) {
   console.error(err);
   setStatus(err.message || 'Something went wrong loading forecasts.', 'error');
-  els.spotGrid.innerHTML = `<p class="error-msg">Could not load data. Make sure the local server is running:<br><code>ruby server.rb</code></p>`;
+  els.spotGrid.innerHTML = `<p class="error-msg">Could not load surf data. Refresh, or try again in a moment.</p>`;
 }
 
 init();

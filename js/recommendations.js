@@ -70,6 +70,8 @@ export function scoreSession({
   idealMax = 4,
   surfableMin = 1,
   surfableMax = 5,
+  windKnown = true,
+  tideKnown = true,
 }) {
   const factors = [];
   let score = 0;
@@ -98,7 +100,9 @@ export function scoreSession({
   }
 
   const wind = windLabel(windDir, windSpeed, offshoreFrom);
-  if (wind.offshore && windSpeed <= 8) {
+  if (!windKnown) {
+    factors.push({ label: 'Wind', detail: 'No wind reading', good: false });
+  } else if (wind.offshore && windSpeed <= 8) {
     score += 25;
     factors.push({ label: 'Wind', detail: `${wind.compass} ${wind.speedMph} mph — ${wind.quality}`, good: true });
   } else if (wind.offshore) {
@@ -112,7 +116,9 @@ export function scoreSession({
     factors.push({ label: 'Wind', detail: `${wind.compass} ${wind.speedMph} mph — ${wind.quality}`, good: false });
   }
 
-  if (tideNorm >= 0.35 && tideNorm <= 0.65) {
+  if (!tideKnown) {
+    factors.push({ label: 'Tide', detail: 'No tide reading', good: false });
+  } else if (tideNorm >= 0.35 && tideNorm <= 0.65) {
     score += 12;
     factors.push({ label: 'Tide', detail: 'Mid tide — ideal', good: true });
   } else if (tideNorm >= 0.2 && tideNorm <= 0.8) {
@@ -131,7 +137,19 @@ export function scoreBand(score) {
   return 'sit';
 }
 
-const SURF_TZ = 'America/Los_Angeles';
+export const SURF_TZ = 'America/Los_Angeles';
+
+/** Calendar date in Pacific time as YYYY-MM-DD (not UTC). */
+export function pacificDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: SURF_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const n = (type) => parts.find((p) => p.type === type)?.value;
+  return `${n('year')}-${n('month')}-${n('day')}`;
+}
 
 export function formatHour(timestamp) {
   return new Date(timestamp * 1000).toLocaleTimeString([], {
