@@ -1,0 +1,9 @@
+name = "socal-surf-guide"
+main = "worker.js"
+compatibility_date = "2026-09-10"
+
+# Static HTML/CSS/JS on the CDN. Only /api/* hits the Worker (Spitcast proxy).
+[assets]
+directory = "."
+binding = "ASSETS"
+run_worker_first = ["/api/*"]

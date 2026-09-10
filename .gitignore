@@ -2,3 +2,5 @@
 .env
 .env.*
 *.log
+.wrangler
+node_modules

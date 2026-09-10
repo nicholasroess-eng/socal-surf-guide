@@ -35,23 +35,30 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080) in your browser.
 
 The Ruby server serves the app and proxies Spitcast API requests (required because the API has no browser CORS headers).
 
-## Deploy to Render (public URL)
+To preview the Cloudflare setup (static files + Worker proxy):
 
-1. Push this folder to a **GitHub** repository (see below if `git` is unavailable).
-2. Sign up at [render.com](https://render.com) and connect your GitHub account.
-3. Click **New → Blueprint** and select the repo (Render reads `render.yaml` automatically).
-   - Or **New → Web Service**, pick the repo, set **Language** to **Ruby**, **Build command** to `bundle install`, **Start command** to `bundle exec ruby server.rb`.
-4. Deploy. Render gives you a public HTTPS URL like `https://socal-surf-guide.onrender.com`.
+```bash
+npx wrangler dev
+```
 
-**If git fails on your Mac** (Xcode license): create a repo at [github.com/new](https://github.com/new), then upload these files via the GitHub website (“Add file → Upload files”).
+## Deploy to Cloudflare (public URL)
+
+This is the public host. HTML is on Cloudflare’s CDN, so the first visit should load immediately. A Worker proxies Spitcast the same way `server.rb` does.
+
+```bash
+npx wrangler deploy
+```
+
+The URL looks like `https://socal-surf-guide.<account>.workers.dev`.
+
+**Render remains a backup.** `render.yaml` is unchanged. The Render URL can still sleep on the free plan.
 
 ### Is it safe to make public?
 
-**Yes, for this app.** There are no API keys, passwords, or user data stored anywhere. The proxy only forwards read-only Spitcast forecast requests and rejects all other paths. Render provides HTTPS automatically.
+**Yes, for this app.** There are no API keys, passwords, or user data stored anywhere. The proxy only forwards read-only Spitcast forecast requests and rejects all other paths. Cloudflare provides HTTPS automatically.
 
 Keep in mind:
 - **Spitcast terms** — credit them (footer already does); don’t name the app “Spitcast.”
-- **Free tier** — Render sleeps after ~15 min idle; first load may take ~30–60 s.
 - **No login needed** — anyone with the URL can use it; that’s fine since there’s nothing private to protect.
 
 ## Alerts
