@@ -135,7 +135,7 @@ end
 
 def hash_password(password, salt_hex)
   salt = [salt_hex].pack('H*')
-  OpenSSL::KDF.pbkdf2_hmac(password, salt: salt, iterations: 120_000, length: 32, hash: 'sha256').unpack1('H*')
+  OpenSSL::KDF.pbkdf2_hmac(password, salt: salt, iterations: 100_000, length: 32, hash: 'sha256').unpack1('H*')
 end
 
 def hashes_match?(left, right)
