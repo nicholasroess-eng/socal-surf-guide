@@ -1,9 +1,17 @@
 name = "socal-surf-guide"
 main = "worker.js"
 compatibility_date = "2026-09-10"
+workers_dev = true
 
-# Static HTML/CSS/JS on the CDN. Only /api/* hits the Worker (Spitcast proxy).
+# Static HTML/CSS/JS on the CDN. Only /api/* hits the Worker (Spitcast proxy and profiles).
+# Attach the custom domain in the Cloudflare dashboard (Workers → SESH → Domains).
 [assets]
 directory = "."
 binding = "ASSETS"
 run_worker_first = ["/api/*"]
+
+# Profiles live here (acct:, user:, sess:).
+[[kv_namespaces]]
+binding = "ALERTS"
+id = "9cc55cf314d1441580812daea7cfffd2"
+preview_id = "53792210f69b453f97201ba458b7a365"

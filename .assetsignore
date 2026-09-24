@@ -14,5 +14,6 @@ render.yaml
 wrangler.toml
 README.md
 *.log
+data
 .env
 .env.*

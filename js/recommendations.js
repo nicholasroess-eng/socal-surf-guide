@@ -151,6 +151,34 @@ export function pacificDateString(date = new Date()) {
   return `${n('year')}-${n('month')}-${n('day')}`;
 }
 
+/** Add calendar days to a YYYY-MM-DD string (no timezone drift). */
+export function addCalendarDays(ymd, n) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+}
+
+export function forecastDayList(fromYmd = pacificDateString(), count = 7) {
+  return Array.from({ length: count }, (_, i) => addCalendarDays(fromYmd, i));
+}
+
+export function weekdayShort(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 18, 0, 0)).toLocaleDateString('en-US', {
+    weekday: 'short',
+    timeZone: SURF_TZ,
+  });
+}
+
+export function monthDay(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 18, 0, 0)).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: SURF_TZ,
+  });
+}
+
 export function formatHour(timestamp) {
   return new Date(timestamp * 1000).toLocaleTimeString([], {
     hour: 'numeric',

@@ -1,7 +1,5 @@
 import {
   MAX_FAVORITE_BEACHES,
-  loadFavoriteIds,
-  saveFavoriteIds,
   toAppSpot,
   applyCoastOrientation,
   groupSpotsByCounty,
@@ -28,20 +26,31 @@ import {
   findPeakWindow,
   formatPeakWindow,
   pacificDateString,
+  forecastDayList,
+  weekdayShort,
+  monthDay,
 } from './recommendations.js';
 import {
   BOARDS,
-  loadQuiver,
-  saveQuiver,
   getBoard,
   boardSvg,
   matchingBoards,
 } from './quiver.js';
+import {
+  accountModalOpen,
+  bootAccount,
+  closeAccountModals,
+  isSignedIn,
+  onAccount,
+  openAuthModal,
+  persistPrefs,
+  setPrefsSource,
+  setupAccount,
+} from './account.js?v=1';
 
 const els = {
   dateInput: document.getElementById('date-input'),
   refreshBtn: document.getElementById('refresh-btn'),
-  notifyBtn: document.getElementById('notify-btn'),
   quiverBtn: document.getElementById('quiver-btn'),
   quiverBar: document.getElementById('quiver-bar'),
   quiverModal: document.getElementById('quiver-modal'),
@@ -60,16 +69,39 @@ const els = {
   detailPanel: document.getElementById('detail-panel'),
   welcomeModal: document.getElementById('welcome-modal'),
   welcomeDismissBtn: document.getElementById('welcome-dismiss-btn'),
+  weekStrip: document.getElementById('week-strip'),
+  shareNote: document.getElementById('share-note'),
+  beachesPersistNote: document.getElementById('beaches-persist-note'),
+  quiverPersistNote: document.getElementById('quiver-persist-note'),
+  welcomeSignInBtn: document.getElementById('welcome-signin-btn'),
+  beachesSignInBtn: document.getElementById('beaches-signin-btn'),
+  quiverSignInBtn: document.getElementById('quiver-signin-btn'),
 };
 
 let selectedSpotId = null;
 let lastPerfectKeys = new Set();
-let quiver = loadQuiver();
-let pickerSelection = new Set(quiver);
+let quiver = [];
+let pickerSelection = new Set();
 let catalog = [];
 let catalogById = new Map();
-let favoriteIds = loadFavoriteIds();
-let beachSelection = new Set(favoriteIds);
+let favoriteIds = [];
+let beachSelection = new Set();
+let viewingShared = false;
+let lastEntries = [];
+let forecastBundle = null;
+
+function invalidateForecasts() {
+  forecastBundle = null;
+}
+
+function dateFromYmd(ymd) {
+  const [y, m, d] = (ymd || todayString()).split('-').map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
+function selectedYmd() {
+  return els.dateInput.value || todayString();
+}
 
 function setStatus(msg, type = 'info') {
   els.status.textContent = msg;
@@ -90,7 +122,7 @@ function isHappeningNow(summary) {
 }
 
 function parseDateInput() {
-  return new Date(`${els.dateInput.value}T12:00:00`);
+  return dateFromYmd(selectedYmd());
 }
 
 function favoriteSpots() {
@@ -106,7 +138,8 @@ function releaseModalLock() {
     els.welcomeModal.hidden &&
     els.beachesModal.hidden &&
     els.quiverModal.hidden &&
-    els.detailModal.hidden
+    els.detailModal.hidden &&
+    !accountModalOpen()
   ) {
     document.body.classList.remove('modal-open');
   }
@@ -114,6 +147,84 @@ function releaseModalLock() {
 
 function getRecommendation(waveFt, spot) {
   return recommendActivity(waveFt, quiver, spot.allowedBoards);
+}
+
+function renderWeekStrip() {
+  const today = todayString();
+  const days = forecastDayList(today, 7);
+  const selected = els.dateInput.value || today;
+  els.weekStrip.innerHTML = days
+    .map((ymd) => {
+      const isToday = ymd === today;
+      const selectedDay = ymd === selected;
+      return `
+        <button type="button" class="week-chip" role="tab" data-date="${ymd}" aria-selected="${selectedDay}">
+          <span class="week-chip-dow">${isToday ? 'Today' : weekdayShort(ymd)}</span>
+          <span class="week-chip-day">${monthDay(ymd)}</span>
+        </button>
+      `;
+    })
+    .join('');
+
+  els.weekStrip.querySelectorAll('.week-chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.date === els.dateInput.value) return;
+      els.dateInput.value = btn.dataset.date;
+      renderWeekStrip();
+      syncShareUrl();
+      loadDay().catch(handleError);
+    });
+  });
+}
+
+function clearShareUrl() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('b') && !url.searchParams.has('d')) return;
+  url.searchParams.delete('b');
+  url.searchParams.delete('d');
+  const search = url.searchParams.toString();
+  history.replaceState({}, '', `${url.pathname}${search ? `?${search}` : ''}`);
+}
+
+function syncShareUrl() {
+  if (!isSignedIn() || !favoriteIds.length || !els.dateInput.value) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('d', els.dateInput.value);
+  url.searchParams.set('b', favoriteIds.join(','));
+  url.searchParams.delete('skill');
+  history.replaceState({}, '', `${url.pathname}${url.search}`);
+}
+
+function applyShareParams() {
+  const params = new URLSearchParams(window.location.search);
+  const today = todayString();
+  const days = new Set(forecastDayList(today, 7));
+  const d = params.get('d');
+  els.dateInput.value = d && days.has(d) ? d : today;
+
+  const raw = params.get('b');
+  if (!raw) return;
+  const ids = raw
+    .split(',')
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .slice(0, MAX_FAVORITE_BEACHES);
+  if (!ids.length) return;
+  favoriteIds = ids;
+  viewingShared = true;
+}
+
+function renderShareNote() {
+  if (!els.shareNote) return;
+  if (viewingShared) {
+    els.shareNote.hidden = false;
+    els.shareNote.textContent = isSignedIn()
+      ? 'Viewing a shared day. Save beaches to keep this list on your profile.'
+      : 'Viewing a shared day. Sign in if you want to keep this list.';
+  } else {
+    els.shareNote.hidden = true;
+    els.shareNote.textContent = '';
+  }
 }
 
 function surfLocal(row) {
@@ -138,10 +249,8 @@ function surfLocal(row) {
   return { year: n('year'), month: n('month'), day: n('day'), hour: n('hour') };
 }
 
-function buildHourly(spot, spotForecast, tideMap, windMap, tideRange, date) {
-  const y = date.getFullYear();
-  const m = date.getMonth() + 1;
-  const d = date.getDate();
+function buildHourly(spot, spotForecast, tideMap, windMap, tideRange, ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
   return spotForecast.flatMap((row) => {
     const loc = surfLocal(row);
     if (loc.year !== y || loc.month !== m || loc.day !== d) return [];
@@ -594,6 +703,7 @@ function renderQuiverPicker() {
 }
 
 function openQuiverModal() {
+  syncAccountHints();
   pickerSelection = new Set(quiver);
   document.getElementById('quiver-modal-title').textContent = quiver.length
     ? 'Edit your quiver'
@@ -610,11 +720,49 @@ function closeQuiverModal() {
   releaseModalLock();
 }
 
+function persistNote() {
+  return isSignedIn()
+    ? 'Saved to your profile.'
+    : 'Kept for this visit only. Sign in to save your beaches and boards.';
+}
+
+function syncAccountHints() {
+  const signedIn = isSignedIn();
+  [els.welcomeSignInBtn, els.beachesSignInBtn, els.quiverSignInBtn].forEach((btn) => {
+    if (btn) btn.hidden = signedIn;
+  });
+  if (els.beachesPersistNote) els.beachesPersistNote.textContent = persistNote();
+  if (els.quiverPersistNote) els.quiverPersistNote.textContent = persistNote();
+}
+
+function applyUserPrefs(sessionUser) {
+  favoriteIds = (sessionUser?.favoriteIds || [])
+    .map(Number)
+    .filter((id) => Number.isFinite(id))
+    .slice(0, MAX_FAVORITE_BEACHES);
+  quiver = (sessionUser?.quiverIds || []).filter((id) => BOARDS.some((board) => board.id === id));
+  pickerSelection = new Set(quiver);
+  beachSelection = new Set(favoriteIds);
+}
+
+function hideBeachesModal() {
+  els.beachesModal.hidden = true;
+  els.beachesModal.setAttribute('aria-hidden', 'true');
+  releaseModalLock();
+}
+
+function rememberPrefs() {
+  if (!isSignedIn()) return Promise.resolve();
+  return persistPrefs(favoriteIds, quiver).catch((err) => {
+    setStatus(err.message || 'Could not save that to your profile.', 'error');
+  });
+}
+
 function saveQuiverSelection() {
   quiver = [...pickerSelection];
-  saveQuiver(quiver);
   closeQuiverModal();
   renderQuiverBar();
+  rememberPrefs();
   loadDay().catch(handleError);
 }
 
@@ -708,6 +856,7 @@ function syncBeachesDismiss() {
 }
 
 function openBeachesModal() {
+  syncAccountHints();
   beachSelection = new Set(favoriteIds);
   els.beachesSearch.value = '';
   renderBeachesPicker();
@@ -728,9 +877,13 @@ function closeBeachesModal() {
 function saveBeachSelection() {
   if (!beachSelection.size) return;
   favoriteIds = [...beachSelection].slice(0, MAX_FAVORITE_BEACHES);
-  saveFavoriteIds(favoriteIds);
+  invalidateForecasts();
+  viewingShared = false;
+  renderShareNote();
   syncBeachesDismiss();
   closeBeachesModal();
+  rememberPrefs();
+  if (!quiver.length) openQuiverModal();
   loadDay().catch(handleError);
 }
 
@@ -777,11 +930,35 @@ async function countyConditions(countyIds, date) {
   return byCounty;
 }
 
+async function ensureForecasts(spots) {
+  const key = `${todayString()}|${spots.map((s) => s.id).join(',')}`;
+  if (forecastBundle?.key === key) return forecastBundle;
+  const fetchDate = dateFromYmd(todayString());
+  const conditions = await countyConditions(
+    spots.map((s) => s.countyId),
+    fetchDate
+  );
+  const forecasts = new Map();
+  await Promise.all(
+    spots.map(async (spot) => {
+      try {
+        const rows = await getSpotForecast(spot.id, fetchDate);
+        forecasts.set(spot.id, Array.isArray(rows) ? rows : []);
+      } catch (err) {
+        console.warn(`Forecast failed for ${spot.name}`, err);
+        forecasts.set(spot.id, []);
+      }
+    })
+  );
+  forecastBundle = { key, conditions, forecasts };
+  return forecastBundle;
+}
+
 async function loadCatalog() {
   const raw = await getAllSpots();
   catalog = applyCoastOrientation(raw.map(toAppSpot));
   catalogById = new Map(catalog.map((s) => [s.id, s]));
-  favoriteIds = loadFavoriteIds().filter((id) => catalogById.has(id));
+  favoriteIds = favoriteIds.filter((id) => catalogById.has(id));
 }
 
 async function loadDay() {
@@ -800,48 +977,42 @@ async function loadDay() {
       </div>
     `;
     els.spotGrid.querySelector('#empty-beaches-btn')?.addEventListener('click', promptBeachesIfNeeded);
+    lastEntries = [];
     setStatus('Choose your beaches to load forecasts');
     closeDetail();
     return;
   }
 
-  const date = parseDateInput();
-  const conditions = await countyConditions(
-    spots.map((s) => s.countyId),
-    date
-  );
+  const ymd = selectedYmd();
+  const date = dateFromYmd(ymd);
+  const bundle = await ensureForecasts(spots);
+  const conditions = bundle.conditions;
 
-  const settled = await Promise.all(
-    spots.map(async (spot) => {
-      try {
-        const forecast = await getSpotForecast(spot.id, date);
-        const cond = conditions[spot.countyId] || {
-          tideMap: new Map(),
-          windMap: new Map(),
-          tideRange: { min: 0, max: 1 },
-          waterTempF: null,
-        };
-        const hours = buildHourly(
-          spot,
-          Array.isArray(forecast) ? forecast : [],
-          cond.tideMap,
-          cond.windMap,
-          cond.tideRange,
-          date
-        );
-        const summary = summarizeSpot(spot, hours, cond.waterTempF, date);
-        return { spot, summary };
-      } catch (err) {
-        console.warn(`Forecast failed for ${spot.name}`, err);
-        return null;
-      }
-    })
-  );
+  const settled = spots.map((spot) => {
+    try {
+      const forecast = bundle.forecasts.get(spot.id) || [];
+      const cond = conditions[spot.countyId] || {
+        tideMap: new Map(),
+        windMap: new Map(),
+        tideRange: { min: 0, max: 1 },
+        waterTempF: null,
+      };
+      const hours = buildHourly(spot, forecast, cond.tideMap, cond.windMap, cond.tideRange, ymd);
+      const summary = summarizeSpot(spot, hours, cond.waterTempF, date);
+      return { spot, summary };
+    } catch (err) {
+      console.warn(`Forecast failed for ${spot.name}`, err);
+      return null;
+    }
+  });
   const entries = settled.filter(Boolean);
+  lastEntries = entries;
   if (!entries.length) throw new Error('Could not load forecasts for your beaches. Refresh and try again.');
 
   els.spotGrid.innerHTML = entries.map((e) => renderSpotCard(e.spot, e.summary)).join('');
   renderBestBanner(entries);
+  renderShareNote();
+  syncShareUrl();
   const n = spots.length;
   setStatus(
     `Updated ${formatClock(new Date())} · ${formatDate(date)} · ${n} beach${n === 1 ? '' : 'es'}${quiver.length ? ' · filtered to your quiver' : ''}`,
@@ -873,27 +1044,9 @@ async function loadDay() {
   }
 }
 
-async function setupNotifications() {
-  if (!('Notification' in window)) {
-    els.notifyBtn.hidden = true;
-    return;
-  }
-  if (Notification.permission === 'granted') {
-    els.notifyBtn.textContent = 'Alerts on';
-    els.notifyBtn.classList.add('active');
-    return;
-  }
-  els.notifyBtn.addEventListener('click', async () => {
-    const perm = await Notification.requestPermission();
-    if (perm === 'granted') {
-      els.notifyBtn.textContent = 'Alerts on';
-      els.notifyBtn.classList.add('active');
-    }
-  });
-}
-
 function setupQuiver() {
   els.quiverBtn.addEventListener('click', openQuiverModal);
+  els.quiverSignInBtn?.addEventListener('click', openAuthModal);
   els.quiverSaveBtn.addEventListener('click', saveQuiverSelection);
   els.quiverModal.querySelectorAll('[data-close-quiver]').forEach((el) => {
     el.addEventListener('click', closeQuiverModal);
@@ -909,22 +1062,29 @@ function openWelcomeModal() {
   document.body.classList.add('modal-open');
 }
 
+function continueSetup() {
+  if (!hasFavorites()) promptBeachesIfNeeded();
+  else if (!quiver.length && isSignedIn() && !viewingShared) openQuiverModal();
+}
+
 function dismissWelcome() {
   localStorage.setItem(WELCOME_KEY, '1');
   els.welcomeModal.hidden = true;
   els.welcomeModal.setAttribute('aria-hidden', 'true');
   releaseModalLock();
-  promptBeachesIfNeeded();
+  continueSetup();
 }
 
 function setupWelcome() {
   els.welcomeDismissBtn.addEventListener('click', dismissWelcome);
+  els.welcomeSignInBtn?.addEventListener('click', openAuthModal);
   els.welcomeModal.querySelectorAll('[data-close-welcome]').forEach((el) => {
     el.addEventListener('click', dismissWelcome);
   });
+  syncAccountHints();
   try {
     if (!localStorage.getItem(WELCOME_KEY)) openWelcomeModal();
-    else promptBeachesIfNeeded();
+    else continueSetup();
   } catch {
     openWelcomeModal();
   }
@@ -936,6 +1096,7 @@ function setupBeaches() {
       .then(openBeachesModal)
       .catch(handleError);
   });
+  els.beachesSignInBtn?.addEventListener('click', openAuthModal);
   els.beachesSaveBtn.addEventListener('click', saveBeachSelection);
   els.beachesSearch.addEventListener('input', renderBeachesPicker);
   els.beachesModal.querySelectorAll('[data-close-beaches]').forEach((el) => {
@@ -943,18 +1104,80 @@ function setupBeaches() {
   });
 }
 
-function init() {
-  els.dateInput.value = todayString();
-  els.dateInput.max = pacificDateString(new Date(Date.now() + 6 * 86400000));
+function clearLegacyPrefs() {
+  try {
+    localStorage.removeItem('sesh-favorite-spots');
+    localStorage.removeItem('socal-surf-quiver');
+    localStorage.removeItem('sesh-alert-phone');
+  } catch {
+    /* private browsing */
+  }
+}
 
-  els.refreshBtn.addEventListener('click', () => loadDay().catch(handleError));
-  els.dateInput.addEventListener('change', () => loadDay().catch(handleError));
+function adoptAccount(next) {
+  viewingShared = false;
+  if (next) {
+    const hasSaved = (next.favoriteIds || []).length || (next.quiverIds || []).length;
+    if (hasSaved) applyUserPrefs(next);
+  } else {
+    favoriteIds = [];
+    quiver = [];
+    pickerSelection = new Set();
+    beachSelection = new Set();
+    clearShareUrl();
+  }
+  invalidateForecasts();
+  renderQuiverBar();
+  renderShareNote();
+  syncAccountHints();
+  if (next && hasFavorites()) {
+    hideBeachesModal();
+    if (!els.quiverModal.hidden && quiver.length) closeQuiverModal();
+  }
+  if (!els.welcomeModal.hidden && next) {
+    localStorage.setItem(WELCOME_KEY, '1');
+    els.welcomeModal.hidden = true;
+    els.welcomeModal.setAttribute('aria-hidden', 'true');
+    releaseModalLock();
+  }
+  if (next) {
+    if (!hasFavorites()) promptBeachesIfNeeded();
+    else if (!quiver.length) openQuiverModal();
+    if (hasFavorites()) loadDay().catch(handleError);
+  } else {
+    loadDay().catch(handleError);
+    if (els.welcomeModal.hidden) promptBeachesIfNeeded();
+  }
+}
+
+async function init() {
+  clearLegacyPrefs();
+  setPrefsSource(() => ({
+    favoriteIds: beachSelection.size ? [...beachSelection] : favoriteIds,
+    quiverIds: pickerSelection.size ? [...pickerSelection] : quiver,
+  }));
+  setupAccount();
+  onAccount(adoptAccount);
+
+  const sessionUser = await bootAccount();
+  if (sessionUser) applyUserPrefs(sessionUser);
+
+  applyShareParams();
+  renderWeekStrip();
+  renderShareNote();
+  syncAccountHints();
+
+  els.refreshBtn.addEventListener('click', () => {
+    invalidateForecasts();
+    loadDay().catch(handleError);
+  });
   els.detailModal.querySelectorAll('[data-close-detail]').forEach((el) => {
     el.addEventListener('click', closeDetail);
   });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if (!els.welcomeModal.hidden) dismissWelcome();
+    if (accountModalOpen()) closeAccountModals();
+    else if (!els.welcomeModal.hidden) dismissWelcome();
     else if (!els.beachesModal.hidden && hasFavorites()) closeBeachesModal();
     else if (!els.quiverModal.hidden) closeQuiverModal();
     else if (!els.detailModal.hidden) closeDetail();
@@ -963,7 +1186,6 @@ function init() {
   setupWelcome();
   setupQuiver();
   setupBeaches();
-  setupNotifications();
   loadDay().catch(handleError);
 }
 
@@ -973,4 +1195,4 @@ function handleError(err) {
   els.spotGrid.innerHTML = `<p class="error-msg">Could not load surf data. Refresh, or try again in a moment.</p>`;
 }
 
-init();
+init().catch(handleError);

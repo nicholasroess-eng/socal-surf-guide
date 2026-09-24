@@ -11,7 +11,7 @@
     <meta property="og:title" content="SESH — Right board. Right day." />
     <meta property="og:description" content="SESH turns swell, wind, and tide into one plain answer: which board, and whether it's worth paddling out." />
     <meta property="og:url" content="https://socal-surf-guide.nicholas-roess.workers.dev/" />
-    <meta property="og:image" content="https://socal-surf-guide.nicholas-roess.workers.dev/img/og-banner.png?v=2" />
+    <meta property="og:image" content="https://socal-surf-guide.nicholas-roess.workers.dev/img/og-banner.png?v=3" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -19,7 +19,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="SESH — Right board. Right day." />
     <meta name="twitter:description" content="SESH turns swell, wind, and tide into one plain answer: which board, and whether it's worth paddling out." />
-    <meta name="twitter:image" content="https://socal-surf-guide.nicholas-roess.workers.dev/img/og-banner.png?v=2" />
+    <meta name="twitter:image" content="https://socal-surf-guide.nicholas-roess.workers.dev/img/og-banner.png?v=3" />
     <link rel="icon" href="img/favicon.svg?v=9" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -27,7 +27,7 @@
       href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/style.css?v=12" />
+    <link rel="stylesheet" href="css/style.css?v=18" />
   </head>
   <body>
     <div class="app">
@@ -42,16 +42,31 @@
         <div class="controls">
           <button type="button" id="beaches-btn" class="btn btn-ghost">Choose my beaches</button>
           <button type="button" id="quiver-btn" class="btn">Create my quiver</button>
-          <label class="date-label">
-            Date
-            <input type="date" id="date-input" />
-          </label>
+          <input type="hidden" id="date-input" />
           <button type="button" id="refresh-btn" class="btn btn-ghost">Refresh</button>
-          <button type="button" id="notify-btn" class="btn btn-ghost">Enable alerts</button>
+          <div class="account">
+            <button type="button" id="account-btn" class="account-btn is-guest" aria-haspopup="dialog" aria-label="Sign in">
+              <img id="account-avatar" class="account-avatar" alt="" hidden />
+              <span id="account-fallback" class="account-fallback" hidden></span>
+              <span id="account-label" class="account-label">Sign in</span>
+            </button>
+            <div id="account-menu" class="account-menu" hidden>
+              <p id="account-menu-name" class="account-menu-name"></p>
+              <p id="account-menu-email" class="account-menu-email"></p>
+              <button type="button" id="account-edit-btn" class="account-menu-item">Edit profile</button>
+              <button type="button" id="account-signout-btn" class="account-menu-item">Sign out</button>
+            </div>
+          </div>
         </div>
       </header>
 
       <p id="status" class="status" aria-live="polite"></p>
+      <p id="share-note" class="share-note" hidden></p>
+
+      <section class="day-tools" aria-label="This week">
+        <p class="day-tools-label">This week</p>
+        <div id="week-strip" class="week-strip" role="tablist" aria-label="Forecast day"></div>
+      </section>
 
       <section id="quiver-bar" class="quiver-bar" hidden></section>
 
@@ -68,7 +83,11 @@
           <p class="welcome-copy">
             Next, pick up to 10 beaches you actually surf, then add the boards you own. Forecasts load only for your list — not the whole coast.
           </p>
+          <p class="welcome-copy">
+            Sign in if you want SESH to remember that list. Without a profile, it asks again each time you open it.
+          </p>
           <div class="quiver-modal-footer">
+            <button type="button" id="welcome-signin-btn" class="btn btn-ghost" data-signin-hint>I have a profile</button>
             <button type="button" id="welcome-dismiss-btn" class="btn">Choose my beaches</button>
           </div>
         </div>
@@ -88,7 +107,9 @@
           </label>
           <p id="beaches-count" class="beaches-count"></p>
           <div id="beaches-picker" class="beaches-picker"></div>
+          <p id="beaches-persist-note" class="persist-note"></p>
           <div class="quiver-modal-footer">
+            <button type="button" id="beaches-signin-btn" class="btn btn-ghost" data-signin-hint>Sign in to save</button>
             <button type="button" id="beaches-save-btn" class="btn" disabled>Save my beaches</button>
           </div>
         </div>
@@ -103,7 +124,9 @@
             <button type="button" class="icon-btn quiver-close" data-close-quiver aria-label="Close">✕</button>
           </div>
           <div id="quiver-picker" class="quiver-picker"></div>
+          <p id="quiver-persist-note" class="persist-note"></p>
           <div class="quiver-modal-footer">
+            <button type="button" id="quiver-signin-btn" class="btn btn-ghost" data-signin-hint>Sign in to save</button>
             <button type="button" id="quiver-save-btn" class="btn" disabled>Save my quiver</button>
           </div>
         </div>
@@ -136,11 +159,69 @@
         </div>
       </div>
 
+      <div id="auth-modal" class="quiver-modal" hidden aria-hidden="true">
+        <div class="quiver-modal-backdrop" data-close-auth></div>
+        <div class="quiver-modal-panel welcome-modal-panel" role="dialog" aria-labelledby="auth-modal-title" aria-modal="true">
+          <div class="quiver-modal-header">
+            <h2 id="auth-modal-title">Sign in</h2>
+            <p id="auth-modal-copy">Your beaches and boards stay on this profile.</p>
+            <button type="button" class="icon-btn quiver-close" data-close-auth aria-label="Close">✕</button>
+          </div>
+          <form id="auth-form">
+            <label class="beaches-search-label" id="auth-name-label">
+              Name
+              <input type="text" id="auth-name" maxlength="40" autocomplete="name" />
+            </label>
+            <label class="beaches-search-label">
+              Email
+              <input type="email" id="auth-email" autocomplete="username" required />
+            </label>
+            <label class="beaches-search-label">
+              Password
+              <input type="password" id="auth-password" minlength="6" autocomplete="current-password" required />
+            </label>
+            <p id="auth-status" class="form-status" aria-live="polite"></p>
+            <div class="quiver-modal-footer">
+              <button type="button" id="auth-switch-btn" class="btn btn-ghost">Create a profile</button>
+              <button type="submit" id="auth-submit-btn" class="btn">Sign in</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div id="profile-modal" class="quiver-modal" hidden aria-hidden="true">
+        <div class="quiver-modal-backdrop" data-close-profile></div>
+        <div class="quiver-modal-panel welcome-modal-panel" role="dialog" aria-labelledby="profile-modal-title" aria-modal="true">
+          <div class="quiver-modal-header">
+            <h2 id="profile-modal-title">Your profile</h2>
+            <p>Beaches and boards save to this profile, on this phone and the next time you sign in.</p>
+            <button type="button" class="icon-btn quiver-close" data-close-profile aria-label="Close">✕</button>
+          </div>
+          <form id="profile-form">
+            <button type="button" id="profile-photo-btn" class="profile-photo-btn" aria-label="Set profile photo">
+              <img id="profile-photo" alt="" hidden />
+              <span id="profile-photo-fallback">+</span>
+            </button>
+            <input type="file" id="profile-photo-input" accept="image/*" hidden />
+            <button type="button" id="profile-photo-clear" class="btn btn-ghost profile-photo-clear" hidden>Remove photo</button>
+            <label class="beaches-search-label">
+              Name
+              <input type="text" id="profile-name" maxlength="40" autocomplete="name" required />
+            </label>
+            <p id="profile-email" class="profile-email"></p>
+            <p id="profile-status" class="form-status" aria-live="polite"></p>
+            <div class="quiver-modal-footer">
+              <button type="submit" id="profile-save-btn" class="btn">Save profile</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <footer class="footer">
-        <p>South Coast, USA. Forecast data via <a href="https://www.spitcast.com" target="_blank" rel="noopener">Spitcast</a>.</p>
+        <p>surfsesh.com · South Coast, USA. Forecast data via <a href="https://www.spitcast.com" target="_blank" rel="noopener">Spitcast</a>.</p>
       </footer>
     </div>
 
-    <script type="module" src="js/app.js?v=17"></script>
+    <script type="module" src="js/app.js?v=24"></script>
   </body>
 </html>

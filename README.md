@@ -55,15 +55,12 @@ The URL looks like `https://socal-surf-guide.<account>.workers.dev`.
 
 ### Is it safe to make public?
 
-**Yes, for this app.** There are no API keys, passwords, or user data stored anywhere. The proxy only forwards read-only Spitcast forecast requests and rejects all other paths. Cloudflare provides HTTPS automatically.
+**Yes, for the forecast proxy.** It only forwards read-only Spitcast requests and rejects other paths. Cloudflare provides HTTPS automatically.
+
+Profiles are optional. Passwords are hashed, and beaches, boards, and photos are stored only for someone who signs in. Signed-out visits are not saved.
 
 Keep in mind:
 - **Spitcast terms** — credit them (footer already does); don’t name the app “Spitcast.”
-- **No login needed** — anyone with the URL can use it; that’s fine since there’s nothing private to protect.
-
-## Alerts
-
-Click **Enable alerts** to get a browser notification when perfect conditions are detected for the current day.
 
 ## Data
 
